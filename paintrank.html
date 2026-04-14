@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PaintRank</title>
+  <meta name="description" content="Application gamifiée de gestion d'équipe pour peintres étudiants — suivi de tâches, streaks et niveaux.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎨</text></svg>">
 
   <!-- Fonts: Satoshi (body) + Cabinet Grotesk (headings) via Fontshare -->
   <link
@@ -19,7 +21,7 @@
   <!-- <script src="firebase-config.js"></script> -->
 
   <!-- Lucide Icons -->
-  <script src="https://unpkg.com/lucide@latest" defer></script>
+  <script src="https://unpkg.com/lucide@0.460.0" defer></script>
 
   <!-- canvas-confetti (level-up animation) -->
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js" defer></script>
@@ -362,17 +364,22 @@
 
     .painter-header {
       text-align: center;
-      padding: 1.5rem 0 1rem;
+      padding: 1.5rem 1rem 1.25rem;
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: 16px;
+      margin-bottom: 1rem;
     }
 
     .painter-name {
       font-size: 1.75rem;
+      margin-bottom: 0.25rem;
     }
 
     .painter-team {
       color: var(--color-text-muted);
       font-size: 0.875rem;
-      margin-top: 0.25rem;
+      margin-top: 0.125rem;
     }
 
     .pay-rate {
@@ -386,6 +393,7 @@
       text-align: center;
       padding: 1.5rem;
       background: var(--color-surface);
+      border: 1px solid var(--color-border);
       border-radius: 16px;
       margin-bottom: 1.25rem;
     }
@@ -778,9 +786,9 @@
 
     .activity-badge.check  { background: var(--color-success-highlight); color: var(--color-success); }
     .activity-badge.uncheck{ background: var(--color-primary-highlight);  color: var(--color-primary); }
-    .activity-badge.levelup{ background: #1a2e4a; color: #60a5fa; }
+    .activity-badge.levelup{ background: var(--color-success-highlight); color: var(--color-success); }
     .activity-badge.leveldown { background: var(--color-primary-highlight); color: var(--color-primary); }
-    .activity-badge.force_levelup { background: #1a2e4a; color: #60a5fa; }
+    .activity-badge.force_levelup { background: var(--color-success-highlight); color: var(--color-success); }
 
     /* Payroll table */
     .payroll-table {
@@ -800,6 +808,10 @@
     .payroll-table td {
       padding: 0.75rem 0.5rem;
       border-bottom: 1px solid var(--color-divider);
+    }
+
+    .payroll-table tr:nth-child(even) td {
+      background: var(--color-surface-2);
     }
 
     /* =========================================================
@@ -1125,12 +1137,13 @@
         </div>
 
         <!-- Streak counter -->
-        <div class="streak-block card">
+        <div class="streak-block">
           <div class="streak-number" id="streak-number">🔥 0/14</div>
           <p class="streak-label" id="streak-label">Commencez aujourd'hui !</p>
           <div class="progress-bar-wrap" style="margin-top:1rem;">
             <div class="progress-bar-fill" id="streak-progress-fill" style="width:0%;"></div>
           </div>
+          <p class="text-xs text-faint" id="streak-remaining" style="margin-top:0.5rem;"></p>
         </div>
 
         <!-- Active module description -->
@@ -1231,6 +1244,11 @@
             </select>
           </div>
 
+          <div style="display:flex;gap:1rem;flex-wrap:wrap;font-size:0.75rem;color:var(--color-text-muted);margin-bottom:0.75rem;" id="override-legend">
+            <span>🔥 Streak = toutes les tâches cochées</span>
+            <span>❌ Fail = certaines tâches manquantes</span>
+            <span>— Neutre = aucune activité</span>
+          </div>
           <div id="override-calendar-container">
             <!-- 30-day calendar grid injected by JS: build30DayGrid() -->
           </div>
@@ -1632,8 +1650,8 @@
       document.getElementById("task-checklist").innerHTML =
         '<li class="task-placeholder"><div class="skeleton-card" style="height:60px;margin-bottom:0;"></div></li>'.repeat(3);
 
-      // Lookup painter by exact name (case-sensitive per spec)
-      db.collection("painters").where("name", "==", nameOrId).get()
+      // Lookup painter by name (case-insensitive — names stored lowercase)
+      db.collection("painters").where("name", "==", nameOrId.toLowerCase()).get()
         .then((snap) => {
           if (snap.empty) { showPainterNotFound(nameOrId); return; }
           startPainterListeners(snap.docs[0].id);
@@ -1980,7 +1998,8 @@
 
       rankContainer.innerHTML = Array(Math.min(painters.length, 5))
         .fill('<div class="skeleton-card"></div>')
-        .join("");
+        .join("")
+        + '<p class="text-xs text-faint" style="text-align:center;padding:0.5rem 0;">Calcul des streaks…</p>';
 
       // 2. Fetch all streak counts in parallel
       const streakResults = await Promise.all(
@@ -2276,6 +2295,13 @@
 
         progressFill.style.width =
           `${Math.min((streakCount / STREAK_REQUIRED) * 100, 100).toFixed(1)}%`;
+        const remainingEl = document.getElementById("streak-remaining");
+        if (remainingEl) {
+          const left = Math.max(0, STREAK_REQUIRED - streakCount);
+          remainingEl.textContent = left > 0
+            ? `${left} jour${left > 1 ? "s" : ""} restant${left > 1 ? "s" : ""} pour le prochain niveau`
+            : "";
+        }
       } else {
         // No active module (master or mod3c waiting for admin)
         streakNumEl.textContent  = "🏆 Complété";
@@ -2284,6 +2310,8 @@
             ? "Tous les modules sont complétés !"
             : "En attente de Master Painter Prime";
         progressFill.style.width = "100%";
+        const remainingEl = document.getElementById("streak-remaining");
+        if (remainingEl) remainingEl.textContent = "";
       }
 
       // ── Recent activity (async, 7 days) ───────────────────────
@@ -3348,7 +3376,7 @@
           return;
         }
         if (enabled) {
-          await triggerLevelUp(painterId, p, "mod3c", true);
+          await triggerLevelUp(painterId, p, "master", true);
         } else {
           // Revert from master → mod3c
           await revertModule(painterId, { ...p, currentModule: "master" }, "mod3c");
@@ -3372,14 +3400,18 @@
       container.innerHTML = '<p class="text-muted text-sm">Chargement…</p>';
 
       try {
-        let query = db.collection("activityLog").orderBy("timestamp", "desc").limit(200);
+        let query = db.collection("activityLog").orderBy("timestamp", "desc");
+        if (filterPainterId) {
+          query = db.collection("activityLog")
+            .where("painterId", "==", filterPainterId)
+            .orderBy("timestamp", "desc")
+            .limit(200);
+        } else {
+          query = query.limit(200);
+        }
         const snap = await query.get();
 
         let docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-
-        if (filterPainterId) {
-          docs = docs.filter((d) => d.painterId === filterPainterId);
-        }
 
         if (docs.length === 0) {
           container.innerHTML = '<p class="text-muted text-sm">Aucune activité enregistrée.</p>';
@@ -3549,9 +3581,11 @@
             // Re-fetch latest painter state
             const snap = await db.collection("painters").doc(painterId).get();
             const fresh = snap.data();
-            // Determine which module was "completed" to trigger the level-up
-            const completedKey = fresh.currentModule;
-            await triggerLevelUp(painterId, fresh, completedKey, true);
+            // Compute target from fresh data (not stale closure)
+            const freshActive = getActiveModule(fresh);
+            const freshTarget = freshActive ?? (fresh.currentModule === "mod3c" ? "master" : null);
+            if (!freshTarget) { alert("Ce peintre est déjà au niveau maximum."); return; }
+            await triggerLevelUp(painterId, fresh, freshTarget, true);
             // Refresh grid
             const updated = _adminPainters.find((p) => p.id === painterId);
             if (updated) await build30DayGrid(painterId, updated);
@@ -3743,7 +3777,9 @@
     /** Flip between light and dark mode. */
     function toggleTheme() {
       const current = document.documentElement.getAttribute("data-theme") ?? "dark";
-      applyTheme(current === "dark" ? "light" : "dark");
+      const next = current === "dark" ? "light" : "dark";
+      localStorage.setItem("paintrank-theme", next);
+      applyTheme(next);
     }
 
     // =========================================================
@@ -3785,8 +3821,8 @@
     // =========================================================
 
     document.addEventListener("DOMContentLoaded", () => {
-      // Apply default dark theme
-      applyTheme("dark");
+      // Apply persisted theme (default to dark)
+      applyTheme(localStorage.getItem("paintrank-theme") || "dark");
 
       // Wire up theme toggle button
       document.getElementById("theme-toggle").addEventListener("click", toggleTheme);
@@ -3852,12 +3888,18 @@
           if (levelUpBtn) {
             const newUp = levelUpBtn.cloneNode(true);
             levelUpBtn.parentNode.replaceChild(newUp, levelUpBtn);
-            newUp.addEventListener("click", () => forceLevelUp(painterId, painter));
+            newUp.addEventListener("click", () => {
+              const fresh = _adminPainters.find((p) => p.id === painterId);
+              if (fresh) forceLevelUp(painterId, fresh);
+            });
           }
           if (levelDownBtn) {
             const newDown = levelDownBtn.cloneNode(true);
             levelDownBtn.parentNode.replaceChild(newDown, levelDownBtn);
-            newDown.addEventListener("click", () => forceLevelDown(painterId, painter));
+            newDown.addEventListener("click", () => {
+              const fresh = _adminPainters.find((p) => p.id === painterId);
+              if (fresh) forceLevelDown(painterId, fresh);
+            });
           }
         }
 
