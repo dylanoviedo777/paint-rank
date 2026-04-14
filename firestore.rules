@@ -7,7 +7,13 @@ rules_version = '2';
 // The admin PIN is frontend-only and visible in source.
 // These rules are intentionally permissive — they prevent
 // accidental cross-painter writes but do NOT enforce strict
-// access control. See README for full security note.
+// access control. See README §9 for full security note.
+//
+// DELIBERATE TRADEOFF: /painters and /checkins are open to
+// all writes. Anyone with the deployed URL and knowledge of
+// the Firestore project ID could modify data. This is accepted
+// for a small, private team operating in good faith.
+// To harden: add Firebase Auth + role-based write rules.
 // =========================================================
 
 service cloud.firestore {

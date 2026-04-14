@@ -237,6 +237,8 @@ Si une tâche cochée est décochée (par le peintre ou par l'admin via Override
 - L'événement est enregistré dans le journal d'activité (`action: "leveldown"`)
 - L'admin peut aussi forcer manuellement un level down via le bouton "⬇ Level down" dans l'onglet Overrides
 
+> **Note technique :** La rétrogradation automatique ne recule que d'un seul module par recalcul. Si un admin décoche des tâches sur plusieurs jours passés via Overrides, la rétrogradation ne s'applique qu'un module à la fois. Pour des réajustements plus importants, utilisez le bouton "⬇ Level down" manuellement.
+
 ---
 
 ## 9. Note de sécurité
