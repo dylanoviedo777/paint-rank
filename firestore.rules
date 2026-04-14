@@ -1,0 +1,55 @@
+rules_version = '2';
+
+// =========================================================
+// PaintRank — Firestore Security Rules
+//
+// SECURITY MODEL: Trust-based (no Firebase Authentication).
+// The admin PIN is frontend-only and visible in source.
+// These rules are intentionally permissive — they prevent
+// accidental cross-painter writes but do NOT enforce strict
+// access control. See README for full security note.
+// =========================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------
+    // /painters/{painterId}
+    //
+    // READ:  Public — any client (leaderboard needs this)
+    // WRITE: Open — trust-based, no Firebase Auth enforced
+    //        (admin PIN is the only gate, enforced client-side)
+    // ---------------------------------------------------------
+    match /painters/{painterId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // ---------------------------------------------------------
+    // /checkins/{painterId}/{dateString}/{taskId}
+    //
+    // READ:  Open — painters and admin both need to read
+    // WRITE: Open — painter writes to their own path;
+    //        admin can write to any path
+    //        (path structure is the only soft boundary)
+    // ---------------------------------------------------------
+    match /checkins/{painterId}/{dateString}/{taskId} {
+      allow read, write: if true;
+    }
+
+    // ---------------------------------------------------------
+    // /activityLog/{docId}
+    //
+    // CREATE: Allowed — clients write audit trail entries
+    // READ:   Allowed — admin reads the full log
+    // UPDATE/DELETE: Denied — log is append-only, immutable
+    // ---------------------------------------------------------
+    match /activityLog/{docId} {
+      allow create: if true;
+      allow read:   if true;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+  }
+}

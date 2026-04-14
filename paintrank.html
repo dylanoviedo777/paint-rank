@@ -1,0 +1,3897 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PaintRank</title>
+
+  <!-- Fonts: Satoshi (body) + Cabinet Grotesk (headings) via Fontshare -->
+  <link
+    rel="stylesheet"
+    href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&f[]=cabinet-grotesk@700,800&display=swap"
+  />
+
+  <!-- Firebase SDK (compat) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
+  <!-- Firebase config (doit être chargé avant paintrank.html si externe, ou inline ici) -->
+  <!-- <script src="firebase-config.js"></script> -->
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest" defer></script>
+
+  <!-- canvas-confetti (level-up animation) -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js" defer></script>
+
+  <!-- Chart.js (progress visualizations) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
+
+  <style>
+    /* =========================================================
+       CSS CUSTOM PROPERTIES — LIGHT & DARK THEMES
+       ========================================================= */
+
+    :root,
+    [data-theme="light"] {
+      --color-bg:              #f9f9f9;
+      --color-surface:         #ffffff;
+      --color-surface-2:       #f4f4f4;
+      --color-surface-offset:  #efefef;
+      --color-surface-dynamic: #e5e5e5;
+      --color-divider:         #d8d8d8;
+      --color-border:          #cccccc;
+
+      --color-text:            #111111;
+      --color-text-muted:      #555555;
+      --color-text-faint:      #999999;
+      --color-text-inverse:    #ffffff;
+
+      --color-primary:         #D4001A;
+      --color-primary-hover:   #aa0015;
+      --color-primary-active:  #7f000f;
+      --color-primary-highlight: #fce8ea;
+
+      --color-accent-black:    #111111;
+      --color-success:         #2e7d32;
+      --color-success-highlight: #d4edda;
+      --color-warning:         #b45309;
+      --color-error:           #D4001A;
+    }
+
+    [data-theme="dark"] {
+      --color-bg:              #0a0a0a;
+      --color-surface:         #141414;
+      --color-surface-2:       #1a1a1a;
+      --color-surface-offset:  #1f1f1f;
+      --color-surface-dynamic: #262626;
+      --color-divider:         #2a2a2a;
+      --color-border:          #333333;
+
+      --color-text:            #f0f0f0;
+      --color-text-muted:      #888888;
+      --color-text-faint:      #555555;
+      --color-text-inverse:    #0a0a0a;
+
+      --color-primary:         #ff1a35;
+      --color-primary-hover:   #e6001e;
+      --color-primary-active:  #cc001a;
+      --color-primary-highlight: #2a0008;
+
+      --color-accent-black:    #f0f0f0;
+      --color-success:         #4caf50;
+      --color-success-highlight: #1a2e1a;
+      --color-warning:         #f59e0b;
+      --color-error:           #ff1a35;
+    }
+
+    /* =========================================================
+       RESET & BASE
+       ========================================================= */
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      font-size: 16px;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: 'Satoshi', system-ui, sans-serif;
+      background-color: var(--color-bg);
+      color: var(--color-text);
+      line-height: 1.5;
+      min-height: 100vh;
+      transition: background-color 0.2s, color 0.2s;
+    }
+
+    h1, h2, h3, h4, h5, h6 {
+      font-family: 'Cabinet Grotesk', 'Satoshi', sans-serif;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+
+    ul {
+      list-style: none;
+    }
+
+    button {
+      cursor: pointer;
+      font-family: inherit;
+      border: none;
+      background: none;
+    }
+
+    input, select, textarea {
+      font-family: inherit;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    /* =========================================================
+       TYPOGRAPHY UTILITIES
+       ========================================================= */
+
+    .text-muted  { color: var(--color-text-muted); }
+    .text-faint  { color: var(--color-text-faint); }
+    .text-primary { color: var(--color-primary); }
+    .text-success { color: var(--color-success); }
+    .text-sm     { font-size: 0.875rem; }
+    .text-xs     { font-size: 0.75rem; }
+    .text-lg     { font-size: 1.125rem; }
+    .text-xl     { font-size: 1.25rem; }
+    .text-2xl    { font-size: 1.5rem; }
+    .font-bold   { font-weight: 700; }
+    .font-medium { font-weight: 500; }
+
+    /* =========================================================
+       LAYOUT
+       ========================================================= */
+
+    .container {
+      width: 100%;
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 0 1rem;
+    }
+
+    .view {
+      padding: 1.5rem 0 4rem;
+    }
+
+    .view[hidden] {
+      display: none !important;
+    }
+
+    .card {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: 12px;
+      padding: 1rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .flex { display: flex; }
+    .flex-col { flex-direction: column; }
+    .items-center { align-items: center; }
+    .justify-between { justify-content: space-between; }
+    .gap-1 { gap: 0.25rem; }
+    .gap-2 { gap: 0.5rem; }
+    .gap-3 { gap: 0.75rem; }
+    .gap-4 { gap: 1rem; }
+
+    /* =========================================================
+       APP HEADER
+       ========================================================= */
+
+    #app-header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--color-surface);
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    #app-header .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 56px;
+    }
+
+    #app-header .logo {
+      font-family: 'Cabinet Grotesk', sans-serif;
+      font-weight: 800;
+      font-size: 1.25rem;
+      color: var(--color-primary);
+      letter-spacing: -0.5px;
+    }
+
+    #app-header .header-right {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    #nav-links {
+      display: flex;
+      gap: 0.25rem;
+    }
+
+    #nav-links a {
+      padding: 0.5rem 0.75rem;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--color-text-muted);
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      transition: color 0.15s, background 0.15s;
+    }
+
+    #nav-links a:hover,
+    #nav-links a.active {
+      color: var(--color-text);
+      background: var(--color-surface-2);
+    }
+
+    #theme-toggle {
+      width: 48px;
+      height: 48px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--color-text-muted);
+      transition: color 0.15s, background 0.15s;
+    }
+
+    #theme-toggle:hover {
+      color: var(--color-text);
+      background: var(--color-surface-2);
+    }
+
+    /* =========================================================
+       LEADERBOARD VIEW
+       ========================================================= */
+
+    #view-leaderboard .section-title {
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .rank-card {
+      /* Individual painter ranking card */
+    }
+
+    .rank-number {
+      font-family: 'Cabinet Grotesk', sans-serif;
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: var(--color-text-faint);
+      min-width: 2rem;
+    }
+
+    .rank-card.rank-1 .rank-number {
+      color: var(--color-primary);
+    }
+
+    .level-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      background: var(--color-primary-highlight);
+      color: var(--color-primary);
+    }
+
+    .streak-flame {
+      color: var(--color-primary);
+      font-weight: 700;
+    }
+
+    .progress-bar-wrap {
+      height: 6px;
+      background: var(--color-surface-dynamic);
+      border-radius: 999px;
+      overflow: hidden;
+      width: 100%;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--color-primary);
+      border-radius: 999px;
+      transition: width 0.4s ease;
+    }
+
+    /* Rank #1 card gets the red highlight */
+    .rank-card.rank-1 {
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 1px var(--color-primary);
+    }
+
+    /* Rank medals: gold/silver/bronze on top-3 rank numbers */
+    .rank-card.rank-1 .rank-number { color: var(--color-primary); }
+    .rank-card.rank-2 .rank-number { color: #aaaaaa; }
+    .rank-card.rank-3 .rank-number { color: #c08040; }
+
+    #team-rankings {
+      margin-top: 2rem;
+    }
+
+    .team-card {
+      transition: border-color 0.2s;
+    }
+
+    .team-card.team-rank-1 {
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 1px var(--color-primary);
+    }
+
+    /* Skeleton loading cards while streak data is being fetched */
+    @keyframes skeletonPulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.35; }
+    }
+
+    .skeleton-card {
+      height: 104px;
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: 12px;
+      margin-bottom: 0.75rem;
+      animation: skeletonPulse 1.4s ease infinite;
+    }
+
+    /* =========================================================
+       PAINTER VIEW
+       ========================================================= */
+
+    .painter-header {
+      text-align: center;
+      padding: 1.5rem 0 1rem;
+    }
+
+    .painter-name {
+      font-size: 1.75rem;
+    }
+
+    .painter-team {
+      color: var(--color-text-muted);
+      font-size: 0.875rem;
+      margin-top: 0.25rem;
+    }
+
+    .pay-rate {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--color-success);
+      margin-top: 0.5rem;
+    }
+
+    .streak-block {
+      text-align: center;
+      padding: 1.5rem;
+      background: var(--color-surface);
+      border-radius: 16px;
+      margin-bottom: 1.25rem;
+    }
+
+    .streak-number {
+      font-family: 'Cabinet Grotesk', sans-serif;
+      font-size: 2.5rem;
+      font-weight: 800;
+      color: var(--color-primary);
+      line-height: 1;
+    }
+
+    .streak-label {
+      color: var(--color-text-muted);
+      font-size: 0.875rem;
+      margin-top: 0.5rem;
+    }
+
+    .module-description {
+      color: var(--color-text-muted);
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+      padding: 0.75rem 1rem;
+      background: var(--color-surface-2);
+      border-radius: 8px;
+    }
+
+    /* Task checklist */
+    #task-checklist {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .task-item {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 1rem;
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: 12px;
+      min-height: 64px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .task-item.done {
+      background: var(--color-success-highlight);
+      border-color: var(--color-success);
+    }
+
+    .task-checkbox {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      border: 2px solid var(--color-border);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+
+    .task-item.done .task-checkbox {
+      background: var(--color-success);
+      border-color: var(--color-success);
+    }
+
+    .task-label {
+      font-weight: 500;
+      font-size: 1rem;
+    }
+
+    /* Recent activity table */
+    #recent-activity {
+      margin-top: 1.5rem;
+    }
+
+    #recent-activity h3 {
+      font-size: 1rem;
+      margin-bottom: 0.75rem;
+      color: var(--color-text-muted);
+    }
+
+    .activity-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+
+    .activity-table th {
+      text-align: left;
+      padding: 0.5rem;
+      color: var(--color-text-faint);
+      font-weight: 500;
+      border-bottom: 1px solid var(--color-divider);
+    }
+
+    .activity-table td {
+      padding: 0.625rem 0.5rem;
+      border-bottom: 1px solid var(--color-divider);
+    }
+
+    .day-status-streak { color: var(--color-primary); font-weight: 700; }
+    .day-status-neutral { color: var(--color-text-faint); }
+    .day-status-fail    { color: var(--color-error); }
+
+    /* ---- Painter view enhancements ---- */
+
+    /* Checkmark SVG inside checked box is white */
+    .task-item.done .task-checkbox svg {
+      color: #ffffff;
+      display: block;
+    }
+
+    /* Tap / press feedback — scale on active */
+    .task-item {
+      transform: scale(1);
+      transition: background 0.15s, border-color 0.15s, transform 0.08s;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    .task-item:active:not(.loading) {
+      transform: scale(0.97);
+    }
+
+    /* Disabled state while async write is in flight */
+    .task-item.loading {
+      opacity: 0.55;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    /* "No tasks" / master painter placeholder */
+    .task-placeholder {
+      text-align: center;
+      padding: 2rem 1rem;
+      color: var(--color-text-muted);
+      font-size: 0.95rem;
+    }
+
+    /* =========================================================
+       ADMIN VIEW
+       ========================================================= */
+
+    #admin-pin-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 60vh;
+      gap: 1rem;
+      text-align: center;
+    }
+
+    #admin-pin-screen h2 {
+      font-size: 1.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    #pin-input {
+      width: 100%;
+      max-width: 240px;
+      padding: 0.75rem 1rem;
+      font-size: 1.5rem;
+      text-align: center;
+      letter-spacing: 0.5rem;
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: 10px;
+      color: var(--color-text);
+      min-height: 56px;
+    }
+
+    #pin-input:focus {
+      outline: none;
+      border-color: var(--color-primary);
+    }
+
+    #admin-panel[hidden] {
+      display: none !important;
+    }
+
+    /* Admin tabs */
+    .admin-tabs {
+      display: flex;
+      gap: 0.25rem;
+      border-bottom: 1px solid var(--color-border);
+      margin-bottom: 1.5rem;
+      overflow-x: auto;
+    }
+
+    .admin-tab-btn {
+      padding: 0.75rem 1rem;
+      font-weight: 500;
+      font-size: 0.875rem;
+      color: var(--color-text-muted);
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      min-height: 48px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .admin-tab-btn.active {
+      color: var(--color-primary);
+      border-bottom-color: var(--color-primary);
+    }
+
+    .admin-tab-panel[hidden] {
+      display: none !important;
+    }
+
+    /* Painter list rows */
+    .painter-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem;
+      border-bottom: 1px solid var(--color-divider);
+      min-height: 56px;
+    }
+
+    /* Override calendar grid */
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 0.25rem;
+      margin-top: 1rem;
+    }
+
+    .calendar-cell {
+      aspect-ratio: 1;
+      border-radius: 6px;
+      background: var(--color-surface-2);
+      border: 1px solid var(--color-border);
+      font-size: 0.7rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      min-height: 40px;
+      transition: background 0.15s, border-color 0.15s;
+      user-select: none;
+    }
+
+    .calendar-cell:hover {
+      border-color: var(--color-primary);
+    }
+
+    .calendar-cell.done {
+      background: var(--color-success-highlight);
+      border-color: var(--color-success);
+      color: var(--color-success);
+      font-weight: 700;
+    }
+
+    .calendar-cell.fail {
+      background: var(--color-primary-highlight);
+      border-color: var(--color-primary);
+      color: var(--color-primary);
+    }
+
+    .calendar-cell.loading {
+      opacity: 0.4;
+      pointer-events: none;
+    }
+
+    /* Add-painter inline form */
+    .add-painter-form {
+      background: var(--color-surface-2);
+      border: 1px solid var(--color-border);
+      border-radius: 10px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      align-items: flex-end;
+    }
+
+    .add-painter-form .form-group {
+      flex: 1;
+      min-width: 120px;
+      margin-bottom: 0;
+    }
+
+    /* Painter row inline edit */
+    .painter-row-name-input {
+      background: var(--color-surface);
+      border: 1px solid var(--color-primary);
+      border-radius: 6px;
+      color: var(--color-text);
+      font-size: 0.95rem;
+      padding: 0.25rem 0.5rem;
+      min-height: 36px;
+    }
+
+    /* Override grid task rows */
+    .override-day-block {
+      margin-bottom: 0.75rem;
+      background: var(--color-surface-2);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .override-day-header {
+      padding: 0.5rem 0.75rem;
+      background: var(--color-surface-offset);
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--color-text-muted);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .override-day-header .day-status {
+      font-size: 0.75rem;
+    }
+
+    .override-task-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.5rem 0.75rem;
+      border-top: 1px solid var(--color-divider);
+      cursor: pointer;
+      min-height: 44px;
+    }
+
+    .override-task-row:hover {
+      background: var(--color-surface-dynamic);
+    }
+
+    .override-task-row.loading {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+
+    .override-task-check {
+      width: 20px;
+      height: 20px;
+      border: 2px solid var(--color-border);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .override-task-check.checked {
+      background: var(--color-success);
+      border-color: var(--color-success);
+      color: #fff;
+    }
+
+    /* Activity log rows */
+    .activity-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      padding: 0.75rem 0;
+      border-bottom: 1px solid var(--color-divider);
+      font-size: 0.875rem;
+    }
+
+    .activity-row:last-child {
+      border-bottom: none;
+    }
+
+    .activity-time {
+      color: var(--color-text-faint);
+      white-space: nowrap;
+      flex-shrink: 0;
+      min-width: 90px;
+      font-size: 0.8rem;
+    }
+
+    .activity-badge {
+      font-size: 0.7rem;
+      padding: 0.15rem 0.45rem;
+      border-radius: 999px;
+      font-weight: 600;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .activity-badge.check  { background: var(--color-success-highlight); color: var(--color-success); }
+    .activity-badge.uncheck{ background: var(--color-primary-highlight);  color: var(--color-primary); }
+    .activity-badge.levelup{ background: #1a2e4a; color: #60a5fa; }
+    .activity-badge.leveldown { background: var(--color-primary-highlight); color: var(--color-primary); }
+    .activity-badge.force_levelup { background: #1a2e4a; color: #60a5fa; }
+
+    /* Payroll table */
+    .payroll-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+
+    .payroll-table th {
+      text-align: left;
+      padding: 0.75rem 0.5rem;
+      color: var(--color-text-muted);
+      border-bottom: 1px solid var(--color-border);
+      font-weight: 500;
+    }
+
+    .payroll-table td {
+      padding: 0.75rem 0.5rem;
+      border-bottom: 1px solid var(--color-divider);
+    }
+
+    /* =========================================================
+       BUTTONS
+       ========================================================= */
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.625rem 1.25rem;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      min-height: 48px;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .btn-primary {
+      background: var(--color-primary);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: var(--color-primary-hover);
+    }
+
+    .btn-secondary {
+      background: var(--color-surface-2);
+      color: var(--color-text);
+      border: 1px solid var(--color-border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--color-surface-offset);
+    }
+
+    .btn-danger {
+      background: var(--color-error);
+      color: #fff;
+    }
+
+    .btn-sm {
+      padding: 0.4rem 0.875rem;
+      font-size: 0.8rem;
+      min-height: 36px;
+    }
+
+    /* =========================================================
+       FORM ELEMENTS
+       ========================================================= */
+
+    .form-input {
+      width: 100%;
+      padding: 0.625rem 0.875rem;
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      color: var(--color-text);
+      font-size: 1rem;
+      min-height: 48px;
+      transition: border-color 0.15s;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: var(--color-primary);
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 500;
+      margin-bottom: 0.375rem;
+      color: var(--color-text-muted);
+    }
+
+    .form-group {
+      margin-bottom: 1rem;
+    }
+
+    /* Toggle switch */
+    .toggle {
+      position: relative;
+      width: 44px;
+      height: 26px;
+      flex-shrink: 0;
+    }
+
+    .toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      inset: 0;
+      background: var(--color-surface-dynamic);
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      left: 3px;
+      top: 3px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.2s;
+    }
+
+    .toggle input:checked + .toggle-slider {
+      background: var(--color-primary);
+    }
+
+    .toggle input:checked + .toggle-slider::before {
+      transform: translateX(18px);
+    }
+
+    /* =========================================================
+       MODALS
+       ========================================================= */
+
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+
+    .modal-overlay[hidden] {
+      display: none !important;
+    }
+
+    .modal-box {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: 16px;
+      padding: 2rem;
+      width: 100%;
+      max-width: 400px;
+      text-align: center;
+    }
+
+    #modal-levelup {
+      position: fixed;
+      inset: 0;
+      z-index: 300;
+      background: rgba(0, 0, 0, 0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #modal-levelup[hidden] {
+      display: none !important;
+    }
+
+    #modal-levelup .modal-box {
+      max-width: 480px;
+    }
+
+    #modal-levelup h2 {
+      font-size: 1.75rem;
+      color: var(--color-primary);
+      margin-bottom: 0.5rem;
+    }
+
+    /* =========================================================
+       ANIMATIONS
+       ========================================================= */
+
+    @keyframes popIn {
+      0%   { transform: scale(0.8); opacity: 0; }
+      60%  { transform: scale(1.08); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    @keyframes fillBar {
+      from { width: 0; }
+      to   { width: var(--fill-pct); }
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .animate-pop {
+      animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    }
+
+    .animate-fade {
+      animation: fadeIn 0.25s ease forwards;
+    }
+
+    /* =========================================================
+       UTILITIES & MISC
+       ========================================================= */
+
+    .divider {
+      height: 1px;
+      background: var(--color-divider);
+      margin: 1rem 0;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+
+    .badge-admin {
+      background: var(--color-primary-highlight);
+      color: var(--color-primary);
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: var(--color-text-faint);
+    }
+
+    .error-msg {
+      color: var(--color-error);
+      font-size: 0.875rem;
+      min-height: 1.25rem;
+    }
+
+    /* Scrollable horizontal overflow for tables */
+    .table-wrap {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- ===================== APP HEADER ===================== -->
+  <header id="app-header">
+    <div class="container">
+      <a href="#leaderboard" class="logo">PaintRank</a>
+      <div class="header-right">
+        <nav id="nav-links">
+          <a href="#leaderboard">Classement</a>
+          <a href="#painter">Mon profil</a>
+          <a href="#admin">Admin</a>
+        </nav>
+        <button id="theme-toggle" aria-label="Changer le thème">
+          <!-- Lucide icon injected by JS -->
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===================== VIEW: LEADERBOARD ===================== -->
+  <div id="view-leaderboard" class="view" hidden>
+    <div class="container">
+      <h2 class="section-title">Classement</h2>
+
+      <!-- Individual rankings -->
+      <section id="individual-rankings">
+        <!-- Rank cards injected by JS: renderLeaderboard() -->
+      </section>
+
+      <!-- Team rankings -->
+      <section id="team-rankings">
+        <h3 style="margin: 1.5rem 0 0.75rem; font-size: 1.1rem;">Classement par équipe</h3>
+        <!-- Team cards injected by JS -->
+      </section>
+    </div>
+  </div>
+
+  <!-- ===================== VIEW: PAINTER ===================== -->
+  <div id="view-painter" class="view" hidden>
+    <div class="container">
+
+      <!-- PAINTER SELECTOR — shown when no name/invalid name in URL -->
+      <div id="painter-selector" hidden>
+        <div style="text-align:center; padding: 3rem 0 2rem;">
+          <div style="font-size:2.5rem; margin-bottom:0.75rem;">🎨</div>
+          <h2 style="font-size:1.5rem; margin-bottom:0.5rem;">Ton profil</h2>
+          <p class="text-muted text-sm">Choisis ton nom pour voir tes tâches du jour</p>
+        </div>
+        <div style="max-width:340px; margin: 0 auto;">
+          <select class="form-input" id="painter-select-dropdown">
+            <option value="">— Sélectionner ton nom —</option>
+          </select>
+          <button class="btn btn-primary" id="painter-select-go"
+            style="margin-top:0.75rem; width:100%;">
+            Voir mon profil
+          </button>
+          <p class="error-msg" id="painter-select-error" style="margin-top:0.75rem; text-align:center;"></p>
+        </div>
+        <div style="text-align:center; margin-top:2rem;">
+          <a href="#leaderboard" class="text-sm text-muted">← Voir le classement</a>
+        </div>
+      </div>
+
+      <!-- PAINTER PROFILE — shown when name is found in Firestore -->
+      <div id="painter-profile" hidden>
+
+        <!-- Header: name, team, badge, pay -->
+        <div class="painter-header">
+          <h1 class="painter-name" id="painter-name">—</h1>
+          <p class="painter-team" id="painter-team">—</p>
+          <span class="level-badge" id="painter-level-badge">—</span>
+          <p class="pay-rate" id="painter-pay-rate">—</p>
+        </div>
+
+        <!-- Streak counter -->
+        <div class="streak-block card">
+          <div class="streak-number" id="streak-number">🔥 0/14</div>
+          <p class="streak-label" id="streak-label">Commencez aujourd'hui !</p>
+          <div class="progress-bar-wrap" style="margin-top:1rem;">
+            <div class="progress-bar-fill" id="streak-progress-fill" style="width:0%;"></div>
+          </div>
+        </div>
+
+        <!-- Active module description -->
+        <div class="module-description" id="module-description" hidden></div>
+
+        <!-- Today's task checklist -->
+        <ul id="task-checklist"></ul>
+
+        <!-- Recent 7-day activity log -->
+        <div id="recent-activity">
+          <h3>7 derniers jours</h3>
+          <div class="table-wrap">
+            <table class="activity-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Tâches</th>
+                  <th>Statut</th>
+                </tr>
+              </thead>
+              <tbody id="recent-activity-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div><!-- /#painter-profile -->
+
+    </div>
+  </div>
+
+  <!-- ===================== VIEW: ADMIN ===================== -->
+  <div id="view-admin" class="view" hidden>
+    <div class="container">
+
+      <!-- PIN screen -->
+      <div id="admin-pin-screen">
+        <h2>Accès Admin</h2>
+        <p class="text-muted text-sm">Entrez votre PIN pour continuer</p>
+        <input
+          type="password"
+          id="pin-input"
+          inputmode="numeric"
+          maxlength="8"
+          placeholder="••••"
+          autocomplete="off"
+        />
+        <button class="btn btn-primary" id="pin-submit-btn">Entrer</button>
+        <p class="error-msg" id="pin-error"></p>
+      </div>
+
+      <!-- Admin panel (hidden until authenticated) -->
+      <div id="admin-panel" hidden>
+
+        <!-- Tab navigation + logout -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0;">
+          <div class="admin-tabs" style="margin-bottom:0;border-bottom:none;flex:1;">
+            <button class="admin-tab-btn active" data-tab="painters">Peintres &amp; Équipes</button>
+            <button class="admin-tab-btn" data-tab="activity">Journal</button>
+            <button class="admin-tab-btn" data-tab="overrides">Overrides</button>
+            <button class="admin-tab-btn" data-tab="payroll">Paie</button>
+          </div>
+          <button class="btn btn-secondary btn-sm" id="admin-logout-btn" style="flex-shrink:0;margin-left:0.5rem;font-size:0.75rem;">Déconnexion</button>
+        </div>
+        <div style="height:1px;background:var(--color-border);margin-bottom:1.5rem;"></div>
+
+        <!-- Tab 1: Painters & Teams -->
+        <div id="tab-painters" class="admin-tab-panel">
+          <div class="flex justify-between items-center" style="margin-bottom: 1rem;">
+            <h3>Peintres</h3>
+            <button class="btn btn-primary btn-sm" id="add-painter-btn">+ Ajouter</button>
+          </div>
+          <div id="painters-list">
+            <!-- Painter rows injected by JS: renderPaintersTab() -->
+          </div>
+        </div>
+
+        <!-- Tab 2: Activity Log -->
+        <div id="tab-activity" class="admin-tab-panel" hidden>
+          <div class="flex justify-between items-center" style="margin-bottom: 1rem;">
+            <h3>Journal d'activité</h3>
+            <select class="form-input" id="activity-filter-painter" style="width: auto; min-height: 40px;">
+              <option value="">Tous les peintres</option>
+              <!-- Options injected by JS -->
+            </select>
+          </div>
+          <div id="activity-log-list">
+            <!-- Log rows injected by JS: renderActivityTab() -->
+          </div>
+        </div>
+
+        <!-- Tab 3: Manual Overrides -->
+        <div id="tab-overrides" class="admin-tab-panel" hidden>
+          <div class="form-group">
+            <label class="form-label" for="override-painter-select">Sélectionner un peintre</label>
+            <select class="form-input" id="override-painter-select">
+              <option value="">— Choisir —</option>
+              <!-- Options injected by JS -->
+            </select>
+          </div>
+
+          <div id="override-calendar-container">
+            <!-- 30-day calendar grid injected by JS: build30DayGrid() -->
+          </div>
+
+          <div id="override-actions" style="margin-top: 1.5rem; display: flex; gap: 0.75rem; flex-wrap: wrap;" hidden>
+            <button class="btn btn-secondary" id="force-leveldown-btn">⬇ Level down</button>
+            <button class="btn btn-primary" id="force-levelup-btn">⬆ Forcer niveau suivant</button>
+          </div>
+        </div>
+
+        <!-- Tab 4: Payroll Export -->
+        <div id="tab-payroll" class="admin-tab-panel" hidden>
+          <div class="flex gap-3" style="margin-bottom: 1.25rem; flex-wrap: wrap;">
+            <div class="form-group" style="flex: 1; min-width: 140px;">
+              <label class="form-label" for="payroll-start">Date début</label>
+              <input type="date" class="form-input" id="payroll-start" />
+            </div>
+            <div class="form-group" style="flex: 1; min-width: 140px;">
+              <label class="form-label" for="payroll-end">Date fin</label>
+              <input type="date" class="form-input" id="payroll-end" />
+            </div>
+            <div style="display: flex; align-items: flex-end; padding-bottom: 1rem;">
+              <button class="btn btn-secondary" id="payroll-refresh-btn">Actualiser</button>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table class="payroll-table">
+              <thead>
+                <tr>
+                  <th>Peintre</th>
+                  <th>Taux départ</th>
+                  <th>Bonus auto</th>
+                  <th>Modules débloqués</th>
+                  <th>Hausses totales</th>
+                  <th>Taux final</th>
+                </tr>
+              </thead>
+              <tbody id="payroll-table-body">
+                <!-- Rows injected by JS: buildPayrollTable() -->
+              </tbody>
+            </table>
+          </div>
+
+          <div style="margin-top: 1rem; text-align: right;">
+            <button class="btn btn-primary" id="export-csv-btn">Exporter CSV</button>
+          </div>
+        </div>
+
+      </div><!-- /#admin-panel -->
+    </div>
+  </div>
+
+  <!-- ===================== MODAL: LEVEL UP ===================== -->
+  <div id="modal-levelup" hidden role="dialog" aria-modal="true">
+    <div class="modal-box animate-pop">
+      <h2 id="levelup-title">🎉 Niveau débloqué !</h2>
+      <p id="levelup-message" style="margin: 1rem 0; color: var(--color-text-muted);">
+        <!-- e.g. "[Name] a débloqué le Module 2 ! +$0.75/hr" -->
+      </p>
+      <p id="levelup-pay" style="font-size: 1.5rem; font-weight: 800; color: var(--color-success);">
+        <!-- e.g. "$20.00/hr" -->
+      </p>
+      <button class="btn btn-primary" id="levelup-close-btn" style="margin-top: 1.5rem;">
+        Fermer
+      </button>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL: CONFIRM ===================== -->
+  <div id="modal-confirm" class="modal-overlay" hidden role="dialog" aria-modal="true">
+    <div class="modal-box">
+      <p id="confirm-message" style="margin-bottom: 1.5rem; font-size: 1rem;"></p>
+      <div class="flex gap-3 justify-between">
+        <button class="btn btn-secondary" id="confirm-cancel-btn">Annuler</button>
+        <button class="btn btn-danger" id="confirm-ok-btn">Confirmer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== SCRIPTS ===================== -->
+  <script>
+    // =========================================================
+    // === CONFIG ===
+    // =========================================================
+
+    // ⚠️  Changer ce PIN avant le déploiement (voir README)
+    const ADMIN_PIN = "1234";
+
+    // Pay rates for each module state
+    const PAY_RATES = {
+      base:   17.00,
+      mod1:   19.25,
+      mod2:   20.00,
+      mod3a:  20.50,
+      mod3b:  21.00,
+      mod3c:  21.50,
+      master: 22.00,
+    };
+
+    // Car bonus amount
+    const CAR_BONUS = 1.00;
+
+    // Module definitions: tasks, next module, display label
+    const MODULE_DEFS = {
+      mod1: {
+        label: "Module 1 — Client Relationship Basics",
+        next: "mod2",
+        prev: "base",
+        payBump: 2.25, // 19.25 - 17.00
+        tasks: [
+          { id: "m1_t1", label: "Start le projet" },
+          { id: "m1_t2", label: "Walk around avec client" },
+          { id: "m1_t3", label: "Enveloppe rouge (client package)" },
+          { id: "m1_t4", label: "Fermer le projet" },
+        ],
+      },
+      mod2: {
+        label: "Module 2 — Client Relationship Advanced",
+        next: "mod3a",
+        prev: "mod1",
+        payBump: 0.75,
+        tasks: [
+          { id: "m2_t1", label: "Mise à jour sur ce qui a été fait" },
+          { id: "m2_t2", label: "Final walk around avec le client" },
+          { id: "m2_t3", label: "Collecter le paiement final" },
+          { id: "m2_t4", label: "Collecter enveloppe rouge (tip, 5-star review, MS donation)" },
+        ],
+      },
+      mod3a: {
+        label: "Module 3A — Material Organization",
+        next: "mod3b",
+        prev: "mod2",
+        payBump: 0.50,
+        tasks: [
+          { id: "m3a_t1", label: "Carrying the crew kit + making sure it's clean" },
+          { id: "m3a_t2", label: "Tracking material" },
+          { id: "m3a_t3", label: "Picking up paint/material at Dulux/Betonel" },
+        ],
+      },
+      mod3b: {
+        label: "Module 3B — Material Autonomy",
+        next: "mod3c",
+        prev: "mod3a",
+        payBump: 0.50,
+        tasks: [
+          { id: "m3b_t1", label: "Giving updates about paint quantity throughout project" },
+          { id: "m3b_t2", label: "Disposing of empty cans" },
+          { id: "m3b_t3", label: "Picking up material at other stores than Dulux/Betonel" },
+        ],
+      },
+      mod3c: {
+        label: "Module 3C — Full Purchasing Autonomy",
+        next: "master",
+        prev: "mod3b",
+        payBump: 0.50,
+        tasks: [
+          { id: "m3c_t1", label: "Always call before making a purchase" },
+          { id: "m3c_t2", label: "Sending a picture of the bill to receive e-transfer" },
+          { id: "m3c_t3", label: "[Tâche personnalisable — modifier dans Admin]" },
+        ],
+      },
+      // "master" has no tasks — applied manually only
+    };
+
+    // Module order for progression
+    const MODULE_ORDER = ["base", "mod1", "mod2", "mod3a", "mod3b", "mod3c", "master"];
+
+    // Streak days required to level up
+    const STREAK_REQUIRED = 14;
+
+    // =========================================================
+    // === FIREBASE INIT ===
+    // =========================================================
+
+    // TODO: remplacer les placeholders par vos vraies valeurs Firebase
+    // (voir firebase-config.js ou coller la config ici directement)
+    const firebaseConfig = {
+      apiKey:            "YOUR_API_KEY",
+      authDomain:        "YOUR_PROJECT.firebaseapp.com",
+      projectId:         "YOUR_PROJECT_ID",
+      storageBucket:     "YOUR_PROJECT.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId:             "YOUR_APP_ID",
+    };
+
+    // Guard: avoid double-initialization if firebase-config.js is also loaded
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+
+    const db = firebase.firestore();
+
+    // =========================================================
+    // === DATA MODEL HELPERS ===
+    // =========================================================
+
+    /**
+     * Returns the active module a painter is currently working on
+     * (the NEXT module after their currentModule).
+     * Master is excluded — it is manual-only and has no 14-day streak.
+     * @param {Object} painter - Firestore painter document data
+     * @returns {string|null} module key (e.g. "mod2") or null if maxed out / manual-only
+     */
+    function getActiveModule(painter) {
+      const idx = MODULE_ORDER.indexOf(painter.currentModule);
+      if (idx === -1 || idx >= MODULE_ORDER.length - 1) return null;
+      const next = MODULE_ORDER[idx + 1];
+      // Master Painter Prime is always applied manually by admin — never auto-triggered
+      if (next === "master") return null;
+      return next;
+    }
+
+    /**
+     * Returns the tasks array for the painter's active module.
+     * @param {Object} painter
+     * @returns {Array<{id: string, label: string}>}
+     */
+    function getActiveTasks(painter) {
+      const active = getActiveModule(painter);
+      if (!active) return [];
+      return MODULE_DEFS[active]?.tasks ?? [];
+    }
+
+    /**
+     * Returns the number of completed modules for leaderboard ranking.
+     * "base" = 0, "mod1" = 1, …, "master" = 6.
+     * @param {Object} painter
+     * @returns {number}
+     */
+    function getModuleCompletionCount(painter) {
+      const idx = MODULE_ORDER.indexOf(painter.currentModule);
+      return Math.max(0, idx);
+    }
+
+    /**
+     * Returns today's date string in YYYY-MM-DD using the local timezone.
+     * Uses en-CA locale because it naturally formats as YYYY-MM-DD.
+     * @returns {string}
+     */
+    function getTodayString() {
+      return new Date().toLocaleDateString("en-CA");
+    }
+
+    /**
+     * Returns the date string for (today − daysBack) in YYYY-MM-DD local timezone.
+     * daysBack=0 → today, daysBack=1 → yesterday, etc.
+     * @param {number} daysBack
+     * @returns {string}
+     */
+    function getDateString(daysBack) {
+      const d = new Date();
+      d.setDate(d.getDate() - daysBack);
+      return d.toLocaleDateString("en-CA");
+    }
+
+    /**
+     * Escape HTML special characters to prevent XSS when injecting user data
+     * into innerHTML.
+     * @param {any} val  Any value — coerced to string first.
+     * @returns {string}
+     */
+    function escHtml(val) {
+      return String(val ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    // =========================================================
+    // === ROUTER ===
+    // =========================================================
+
+    // Active Firestore unsubscribe handles (cleaned up on route change)
+    let _unsubscribers = [];
+
+    /** Cancel all active Firestore listeners and clear the list. */
+    function unsubscribeAll() {
+      _unsubscribers.forEach((fn) => { try { fn(); } catch (_) {} });
+      _unsubscribers = [];
+    }
+
+    /**
+     * Parse the current hash and dispatch to the correct view.
+     * Called on DOMContentLoaded and on every hashchange.
+     *
+     * #leaderboard           → showLeaderboard()
+     * #painter               → showPainterSelect()
+     * #painter/<name>        → showPainter(name)
+     * #admin                 → showAdmin()
+     * anything else / empty  → redirect to #leaderboard
+     */
+    function route() {
+      const hash = window.location.hash || "#leaderboard";
+
+      if (hash === "#leaderboard" || hash === "") {
+        showLeaderboard();
+      } else if (hash.startsWith("#painter/")) {
+        const nameOrId = decodeURIComponent(hash.slice("#painter/".length));
+        showPainter(nameOrId);
+      } else if (hash === "#painter") {
+        showPainterSelect();
+      } else if (hash === "#admin") {
+        showAdmin();
+      } else {
+        window.location.hash = "#leaderboard";
+      }
+    }
+
+    window.addEventListener("hashchange", route);
+
+    /**
+     * Hide every .view element, then reveal the one with the given id.
+     * @param {string} id  Element id without '#'
+     */
+    function showView(id) {
+      document.querySelectorAll(".view").forEach((el) => { el.hidden = true; });
+      const target = document.getElementById(id);
+      if (target) target.hidden = false;
+    }
+
+    /**
+     * Mark the matching nav link as active; clear the others.
+     * @param {string} viewHash  e.g. "leaderboard"
+     */
+    function updateNavActive(viewHash) {
+      document.querySelectorAll("#nav-links a").forEach((a) => {
+        const href = a.getAttribute("href") ?? "";
+        a.classList.toggle("active", href === `#${viewHash}`);
+      });
+    }
+
+    /**
+     * Show the leaderboard view and start a realtime Firestore listener.
+     *
+     * Level-up detection: compares each painter's currentModule against the
+     * previous snapshot. If it advanced (module index increased), the level-up
+     * celebration modal is shown. The initial snapshot is skipped to avoid
+     * showing stale celebrations on page load.
+     */
+    function showLeaderboard() {
+      unsubscribeAll();
+      showView("view-leaderboard");
+      updateNavActive("leaderboard");
+
+      // Track previous module states to detect level-ups across live updates
+      const prevModules = {};   // { painterId → currentModule }
+      let isInitialLoad = true;
+
+      const unsub = listenPainters((painters) => {
+        // Detect module advances on subsequent snapshots (skip first)
+        if (!isInitialLoad) {
+          painters.forEach((painter) => {
+            const prev = prevModules[painter.id];
+            if (prev !== undefined && prev !== painter.currentModule) {
+              const prevIdx = MODULE_ORDER.indexOf(prev);
+              const newIdx  = MODULE_ORDER.indexOf(painter.currentModule);
+              if (newIdx > prevIdx) {
+                showLevelUpModal(painter, painter.currentModule);
+              }
+            }
+          });
+        }
+
+        // Save current state for next comparison
+        painters.forEach((p) => { prevModules[p.id] = p.currentModule; });
+        isInitialLoad = false;
+
+        // Trigger async render (generation counter inside handles races)
+        renderLeaderboard(painters);
+      });
+
+      _unsubscribers.push(unsub);
+    }
+
+    /**
+     * Show the painter profile view for a given name (from the URL hash).
+     * Looks up the painter by exact name match in Firestore.
+     * Falls back to the selector if the painter is not found.
+     *
+     * @param {string} nameOrId  Decoded name from #painter/<name>
+     */
+    function showPainter(nameOrId) {
+      unsubscribeAll();
+      showView("view-painter");
+      updateNavActive("painter");
+      _currentPainter = null;
+
+      // Show profile area (elements must exist in DOM) with loading placeholders
+      document.getElementById("painter-selector").hidden = true;
+      document.getElementById("painter-profile").hidden = false;
+
+      document.getElementById("painter-name").textContent = nameOrId;
+      document.getElementById("painter-team").textContent = "…";
+      document.getElementById("painter-level-badge").textContent = "…";
+      document.getElementById("painter-pay-rate").textContent = "…";
+      document.getElementById("task-checklist").innerHTML =
+        '<li class="task-placeholder"><div class="skeleton-card" style="height:60px;margin-bottom:0;"></div></li>'.repeat(3);
+
+      // Lookup painter by exact name (case-sensitive per spec)
+      db.collection("painters").where("name", "==", nameOrId).get()
+        .then((snap) => {
+          if (snap.empty) { showPainterNotFound(nameOrId); return; }
+          startPainterListeners(snap.docs[0].id);
+        })
+        .catch((err) => {
+          console.error("[showPainter]", err);
+          showPainterNotFound(nameOrId);
+        });
+    }
+
+    /**
+     * Show the painter name-selector screen (no name in URL).
+     * Populates a dropdown from Firestore and redirects on submit.
+     */
+    function showPainterSelect() {
+      unsubscribeAll();
+      showView("view-painter");
+      updateNavActive("painter");
+      _currentPainter = null;
+
+      document.getElementById("painter-selector").hidden = false;
+      document.getElementById("painter-profile").hidden = true;
+      document.getElementById("painter-select-error").textContent = "";
+
+      _populatePainterDropdown();
+      _wirePainterSelectBtn();
+    }
+
+    /** Fill the painter-select-dropdown with all painters sorted by name. */
+    function _populatePainterDropdown() {
+      const sel = document.getElementById("painter-select-dropdown");
+      sel.innerHTML = '<option value="">— Sélectionner ton nom —</option>';
+      db.collection("painters").get()
+        .then((snap) => {
+          snap.docs
+            .sort((a, b) => a.data().name.localeCompare(b.data().name))
+            .forEach((doc) => {
+              const opt = document.createElement("option");
+              opt.value = doc.data().name;
+              opt.textContent = doc.data().name;
+              sel.appendChild(opt);
+            });
+        })
+        .catch(console.error);
+    }
+
+    /** Wire the "Voir mon profil" button (cloneNode clears previous listeners). */
+    function _wirePainterSelectBtn() {
+      const oldBtn = document.getElementById("painter-select-go");
+      const newBtn = oldBtn.cloneNode(true);
+      oldBtn.parentNode.replaceChild(newBtn, oldBtn);
+      newBtn.addEventListener("click", () => {
+        const name = document.getElementById("painter-select-dropdown")?.value;
+        if (!name) {
+          document.getElementById("painter-select-error").textContent =
+            "Veuillez sélectionner ton nom.";
+          return;
+        }
+        window.location.hash = `#painter/${encodeURIComponent(name)}`;
+      });
+    }
+
+    /**
+     * Show the selector with a "not found" error.
+     * Called when #painter/<name> doesn't match any Firestore document.
+     */
+    function showPainterNotFound(name) {
+      document.getElementById("painter-selector").hidden = false;
+      document.getElementById("painter-profile").hidden = true;
+
+      if (name) {
+        document.getElementById("painter-select-error").textContent =
+          `Peintre "${name}" introuvable. Sélectionne ton nom.`;
+      }
+
+      _populatePainterDropdown();
+      _wirePainterSelectBtn();
+    }
+
+    /**
+     * Subscribe to realtime Firestore updates for a specific painter.
+     *
+     * Flow:
+     *  1. One-shot fetch of painter doc + today's checkins (avoids listener race)
+     *  2. Initial full render
+     *  3. Realtime painter-doc listener → re-renders header + streak + activity on change
+     *  4. Realtime today-checkins listener → re-renders checklist only on task toggle
+     *
+     * @param {string} painterId
+     */
+    async function startPainterListeners(painterId) {
+      const today = getTodayString();
+
+      // 1. Parallel one-shot fetch
+      const [painterSnap, checkinSnap] = await Promise.all([
+        db.collection("painters").doc(painterId).get(),
+        db.collection("checkins").doc(painterId).collection(today).get(),
+      ]);
+
+      if (!painterSnap.exists) { showPainterNotFound(""); return; }
+
+      _currentPainter = { id: painterId, ...painterSnap.data() };
+
+      // 2. Initial full render
+      await renderPainter(_currentPainter);
+
+      // Checklist from one-shot snapshot
+      const initialCheckins = {};
+      checkinSnap.docs.forEach((d) => { initialCheckins[d.id] = d.data(); });
+      renderChecklist(getActiveTasks(_currentPainter), initialCheckins, painterId);
+
+      // 3. Realtime painter-doc listener
+      const painterUnsub = db.collection("painters").doc(painterId).onSnapshot(
+        async (snap) => {
+          if (!snap.exists) return;
+          _currentPainter = { id: painterId, ...snap.data() };
+          await renderPainter(_currentPainter);
+        },
+        (err) => console.error("[painterDoc onSnapshot]", err)
+      );
+
+      // 4. Realtime today-checkins listener
+      const checkinUnsub = listenCheckins(painterId, today, (checkins) => {
+        if (!_currentPainter) return;
+        renderChecklist(getActiveTasks(_currentPainter), checkins, painterId);
+      });
+
+      _unsubscribers.push(painterUnsub, checkinUnsub);
+    }
+
+    function showAdmin() {
+      unsubscribeAll();
+      showView("view-admin");
+      updateNavActive("admin");
+
+      if (adminAuthed) {
+        document.getElementById("admin-pin-screen").hidden = true;
+        document.getElementById("admin-panel").hidden = false;
+        _switchAdminTab("painters");
+        // Realtime painters listener drives all admin sub-views
+        const unsub = listenPainters((painters) => {
+          _adminPainters = painters;
+          renderPaintersTab(painters);
+          _populateAdminPainterSelects(painters);
+        });
+        _unsubscribers.push(unsub);
+      } else {
+        document.getElementById("admin-pin-screen").hidden = false;
+        document.getElementById("admin-panel").hidden = true;
+        document.getElementById("pin-error").textContent = "";
+        document.getElementById("pin-input").value = "";
+        setTimeout(() => document.getElementById("pin-input").focus(), 50);
+      }
+    }
+
+    // =========================================================
+    // === STREAK LOGIC ===
+    // =========================================================
+
+    /**
+     * Classify a single calendar day given its Firestore check-in documents.
+     *
+     * Rules (exact spec):
+     *   neutral → 0 documents exist for that day
+     *   fail    → documents exist but NOT all active-module tasks are done=true
+     *   streak  → documents exist AND every active-module task is done=true
+     *
+     * @param {Array} checkInDocs  Firestore QueryDocumentSnapshot[] for that date
+     * @param {string} activeModuleKey  e.g. "mod2"
+     * @returns {"streak"|"neutral"|"fail"}
+     */
+    function classifyDay(checkInDocs, activeModuleKey) {
+      // No check-in activity at all → neutral (not the same as incomplete)
+      if (checkInDocs.length === 0) return "neutral";
+
+      const moduleDef = MODULE_DEFS[activeModuleKey];
+      // Unknown or no-task module (e.g. master) → treat as neutral
+      if (!moduleDef || moduleDef.tasks.length === 0) return "neutral";
+
+      // Build a map of { taskId → done } from the Firestore documents
+      const doneMap = {};
+      checkInDocs.forEach((doc) => {
+        doneMap[doc.id] = doc.data().done === true;
+      });
+
+      // Every required task must be explicitly done=true
+      const allDone = moduleDef.tasks.every((t) => doneMap[t.id] === true);
+      return allDone ? "streak" : "fail";
+    }
+
+    /**
+     * Pure streak computation from a pre-classified day array.
+     * Isolated from Firestore so it can be unit-tested synchronously.
+     *
+     * Algorithm (exact spec):
+     *   Walk from newest → oldest.
+     *   Stop at the first fail day (that is the reset point).
+     *   Count streak days seen before that fail.
+     *   Neutral days are skipped — they neither count nor reset.
+     *
+     * @param {Array<{date: string, status: "streak"|"neutral"|"fail"}>} days
+     *   Ordered NEWEST first (index 0 = today).
+     * @returns {number} streak count
+     */
+    function computeStreakFromDays(days) {
+      let count = 0;
+      for (const { status } of days) {
+        if (status === "fail") break;   // reset point found — stop
+        if (status === "streak") count++;
+        // neutral → skip, no change to count
+      }
+      return count;
+    }
+
+    /**
+     * Compute the current streak for a painter by querying Firestore.
+     * Reads check-ins day by day, newest first, stopping early when:
+     *   (a) a fail day is encountered (streak reset point), OR
+     *   (b) STREAK_REQUIRED streak days have been found (no need to go further back).
+     *
+     * NOTE: This performs one Firestore subcollection read per calendar day walked.
+     * For typical use (painters check in most days), the loop exits within ~30 iterations.
+     *
+     * @param {string} painterId
+     * @param {string} activeModuleKey  e.g. "mod1"
+     * @returns {Promise<{count: number, days: Array<{date, status}>}>}
+     */
+    async function computeStreak(painterId, activeModuleKey) {
+      // Safety bound: never look back more than this many calendar days.
+      // In practice we exit much earlier due to the early-exit conditions below.
+      const MAX_LOOKBACK = 200;
+
+      const days = [];  // newest-first, for computeStreakFromDays
+      let count = 0;
+
+      for (let i = 0; i < MAX_LOOKBACK; i++) {
+        const dateString = getDateString(i);
+
+        const snapshot = await db
+          .collection("checkins")
+          .doc(painterId)
+          .collection(dateString)
+          .get();
+
+        const status = classifyDay(snapshot.docs, activeModuleKey);
+        days.push({ date: dateString, status });
+
+        if (status === "fail") {
+          // Fail day is the reset point. count holds streak days accumulated so far.
+          break;
+        }
+        if (status === "streak") {
+          count++;
+          // Early exit: once we have enough streak days, no need to look further back.
+          if (count >= STREAK_REQUIRED) break;
+        }
+        // neutral → continue walking backwards
+      }
+
+      return { count, days };
+    }
+
+    // =========================================================
+    // === FIRESTORE LISTENERS ===
+    // =========================================================
+
+    /**
+     * Listen to all painters in realtime via a Firestore onSnapshot listener.
+     * Calls callback immediately with current data, then on every change.
+     *
+     * @param {function} callback  Called with Array<{id, ...painterData}>
+     * @returns {function} unsubscribe function — call to stop listening
+     */
+    function listenPainters(callback) {
+      return db.collection("painters").onSnapshot(
+        (snapshot) => {
+          const painters = snapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          }));
+          callback(painters);
+        },
+        (err) => console.error("[listenPainters] Firestore error:", err)
+      );
+    }
+
+    /**
+     * Listen to all check-in documents for a painter on a specific date.
+     * The subcollection path is: /checkins/{painterId}/{dateString}/{taskId}
+     *
+     * @param {string} painterId
+     * @param {string} dateString  "YYYY-MM-DD"
+     * @param {function} callback  Called with { [taskId]: { done, timestamp, adminOverride, ... } }
+     * @returns {function} unsubscribe function
+     */
+    function listenCheckins(painterId, dateString, callback) {
+      return db
+        .collection("checkins")
+        .doc(painterId)
+        .collection(dateString)
+        .onSnapshot(
+          (snapshot) => {
+            const checkins = {};
+            snapshot.docs.forEach((doc) => {
+              checkins[doc.id] = doc.data();
+            });
+            callback(checkins);
+          },
+          (err) => console.error("[listenCheckins] Firestore error:", err)
+        );
+    }
+
+    // =========================================================
+    // === LEADERBOARD RENDERING ===
+    // =========================================================
+
+    // Generation counter prevents a stale async render from overwriting a newer one.
+    // Each call to renderLeaderboard grabs a new generation number. If a newer call
+    // starts before the current one finishes fetching streaks, the older one aborts.
+    let _leaderboardGen = 0;
+
+    /**
+     * Async leaderboard render.
+     *
+     * 1. Show skeleton cards immediately (no flash of empty content).
+     * 2. Fetch streak counts for every painter in parallel.
+     * 3. Sort: modules completed ↓, then streak days ↓ (tie-breaker).
+     * 4. Render rank cards + team section.
+     *
+     * @param {Array<{id: string, name, teamName, currentModule, payRate, carBonus}>} painters
+     */
+    async function renderLeaderboard(painters) {
+      const gen = ++_leaderboardGen;
+      const rankContainer = document.getElementById("individual-rankings");
+      const teamContainer = document.getElementById("team-rankings");
+
+      // 1. Immediate skeleton so the layout doesn't jump
+      if (painters.length === 0) {
+        rankContainer.innerHTML =
+          '<div class="empty-state"><p>Aucun peintre enregistré.<br>Ajoutez des peintres depuis le panneau Admin.</p></div>';
+        teamContainer.innerHTML = "";
+        return;
+      }
+
+      rankContainer.innerHTML = Array(Math.min(painters.length, 5))
+        .fill('<div class="skeleton-card"></div>')
+        .join("");
+
+      // 2. Fetch all streak counts in parallel
+      const streakResults = await Promise.all(
+        painters.map(async (painter) => {
+          const activeModule = getActiveModule(painter);
+          if (!activeModule) return { id: painter.id, count: 0 };
+          try {
+            const { count } = await computeStreak(painter.id, activeModule);
+            return { id: painter.id, count };
+          } catch (e) {
+            console.warn("[renderLeaderboard] streak fetch failed for", painter.id, e);
+            return { id: painter.id, count: 0 };
+          }
+        })
+      );
+
+      // Abort if a newer render overtook us while we were fetching
+      if (gen !== _leaderboardGen) return;
+
+      // Build { painterId → streakCount } lookup
+      const streakMap = {};
+      streakResults.forEach(({ id, count }) => { streakMap[id] = count; });
+
+      // 3. Sort: modules completed desc → streak days desc
+      const sorted = [...painters].sort((a, b) => {
+        const modDiff = getModuleCompletionCount(b) - getModuleCompletionCount(a);
+        if (modDiff !== 0) return modDiff;
+        return (streakMap[b.id] ?? 0) - (streakMap[a.id] ?? 0);
+      });
+
+      // 4. Render individual rank cards
+      rankContainer.innerHTML = "";
+      sorted.forEach((painter, i) => {
+        rankContainer.appendChild(buildRankCard(painter, i + 1, streakMap[painter.id] ?? 0));
+      });
+
+      // 4b. Team section
+      buildTeamSection(painters, streakMap, teamContainer);
+
+      // Re-init Lucide icons injected via innerHTML
+      if (typeof lucide !== "undefined") lucide.createIcons();
+    }
+
+    /**
+     * Build a single painter rank card as a DOM element.
+     *
+     * Shows: rank number, name, team, level badge, pay rate, streak flame + count,
+     * and a compact progress bar toward the next module (X/14 days).
+     *
+     * @param {Object} painter
+     * @param {number} rank          1-based rank position
+     * @param {number} streakCount   Current streak day count (already fetched)
+     * @returns {HTMLElement}
+     */
+    function buildRankCard(painter, rank, streakCount) {
+      const activeModule      = getActiveModule(painter);
+      const progress          = activeModule
+        ? Math.min((streakCount / STREAK_REQUIRED) * 100, 100)
+        : 100; // maxed out → full bar
+
+      // Badge label: what they have NOW (current module completed)
+      const badgeLabel = painter.currentModule === "master"
+        ? "Master Painter Prime ⭐"
+        : painter.currentModule === "base"
+        ? "Débutant"
+        : (MODULE_DEFS[painter.currentModule]?.label ?? painter.currentModule);
+
+      // Next module label for the progress bar subtitle
+      const nextLabel = activeModule
+        ? (MODULE_DEFS[activeModule]?.label ?? activeModule)
+        : "Niveau max atteint";
+
+      const progressLabel = activeModule
+        ? `${streakCount}/${STREAK_REQUIRED} jours`
+        : "✓ Complété";
+
+      const card = document.createElement("div");
+      // rank-1 / rank-2 / rank-3 drive CSS medal colours
+      card.className = `card rank-card rank-${rank}`;
+      card.dataset.painterId = painter.id;
+
+      card.innerHTML = `
+        <div class="flex items-center gap-3">
+          <!-- Rank number -->
+          <div class="rank-number">#${rank}</div>
+
+          <!-- Name + team + badge -->
+          <div style="flex:1;min-width:0;">
+            <div class="flex items-center gap-2" style="flex-wrap:wrap;gap:0.4rem 0.6rem;">
+              <span style="font-size:1.05rem;font-weight:700;white-space:nowrap;">
+                ${escHtml(painter.name)}
+              </span>
+              <span class="level-badge">${escHtml(badgeLabel)}</span>
+            </div>
+            <div class="flex items-center gap-3" style="margin-top:0.2rem;flex-wrap:wrap;">
+              <span class="text-sm text-muted">${escHtml(painter.teamName || "—")}</span>
+              <span style="font-weight:700;color:var(--color-success);font-size:0.9rem;">
+                $${Number(painter.payRate ?? 0).toFixed(2)}/hr
+              </span>
+            </div>
+          </div>
+
+          <!-- Streak counter (right-aligned) -->
+          <div style="text-align:right;flex-shrink:0;min-width:52px;">
+            <div style="font-size:1.25rem;font-weight:800;color:var(--color-primary);line-height:1;">
+              🔥 ${streakCount}
+            </div>
+            <div class="text-xs text-faint" style="margin-top:0.1rem;">
+              ${streakCount === 1 ? "jour" : "jours"}
+            </div>
+          </div>
+        </div>
+
+        <!-- Progress bar toward next module -->
+        <div style="margin-top:0.75rem;">
+          <div class="flex justify-between text-xs text-faint" style="margin-bottom:0.35rem;">
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:65%;">
+              ${escHtml(nextLabel)}
+            </span>
+            <span style="flex-shrink:0;padding-left:0.5rem;">${progressLabel}</span>
+          </div>
+          <div class="progress-bar-wrap">
+            <div class="progress-bar-fill" style="width:${progress.toFixed(1)}%;"></div>
+          </div>
+        </div>
+      `;
+
+      return card;
+    }
+
+    /**
+     * Build the team rankings section and inject it into the given container.
+     *
+     * Teams are sorted by combined module completions (desc), then combined
+     * streak days (desc) as a tie-breaker. Painters with no teamName are
+     * grouped under "Sans équipe".
+     *
+     * @param {Array}  painters
+     * @param {Object} streakMap   { painterId → streakCount }
+     * @param {HTMLElement} container
+     */
+    function buildTeamSection(painters, streakMap, container) {
+      // Group painters by team name
+      const groups = {};
+      painters.forEach((p) => {
+        const key = (p.teamName || "Sans équipe").trim();
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(p);
+      });
+
+      const teamNames = Object.keys(groups);
+      if (teamNames.length <= 1 && !groups["Sans équipe"]) {
+        // Only one implicit team — hide section (not meaningful)
+        container.innerHTML = "";
+        return;
+      }
+
+      // Compute team aggregate scores
+      const teams = teamNames.map((name) => {
+        const members = groups[name];
+        const combinedModules = members.reduce(
+          (s, p) => s + getModuleCompletionCount(p), 0
+        );
+        const combinedStreak = members.reduce(
+          (s, p) => s + (streakMap[p.id] ?? 0), 0
+        );
+        const avgPay = members.reduce((s, p) => s + (p.payRate ?? 0), 0) / members.length;
+        return { name, members, combinedModules, combinedStreak, avgPay };
+      });
+
+      // Sort: combined modules desc, combined streak desc
+      teams.sort((a, b) => {
+        const modDiff = b.combinedModules - a.combinedModules;
+        return modDiff !== 0 ? modDiff : b.combinedStreak - a.combinedStreak;
+      });
+
+      const cardsHtml = teams.map((team, i) => {
+        const membersLabel = team.members.map((m) => escHtml(m.name)).join(" &amp; ");
+        return `
+          <div class="card team-card ${i === 0 ? "team-rank-1" : ""}">
+            <div class="flex items-center justify-between gap-3">
+              <div style="min-width:0;">
+                <div class="flex items-center gap-2">
+                  <span class="rank-number" style="font-size:1.1rem;">#${i + 1}</span>
+                  <span style="font-weight:700;font-size:1rem;white-space:nowrap;">
+                    ${escHtml(team.name)}
+                  </span>
+                </div>
+                <div class="text-sm text-muted" style="margin-top:0.2rem;padding-left:2.2rem;">
+                  ${membersLabel}
+                </div>
+              </div>
+              <div style="text-align:right;flex-shrink:0;">
+                <div style="font-weight:700;color:var(--color-primary);font-size:0.95rem;">
+                  ${team.combinedModules} module${team.combinedModules !== 1 ? "s" : ""}
+                </div>
+                <div class="text-sm text-muted">
+                  🔥 ${team.combinedStreak} jour${team.combinedStreak !== 1 ? "s" : ""}
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      container.innerHTML = `
+        <h3 style="margin:0 0 0.75rem;font-size:1.1rem;font-family:'Cabinet Grotesk',sans-serif;">
+          Classement par équipe
+        </h3>
+        ${cardsHtml}
+      `;
+    }
+
+    // =========================================================
+    // === PAINTER VIEW ===
+    // =========================================================
+
+    // Holds the currently displayed painter data so the checkin listener
+    // can access it without re-fetching.
+    let _currentPainter = null;
+
+    // SVG checkmark used inside checked task checkboxes
+    const CHECK_SVG = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="20 6 9 17 4 12"></polyline></svg>`;
+
+    /**
+     * Render the full painter profile: header, streak block, module description,
+     * and recent activity log. Does NOT render the checklist (that is handled
+     * separately by the checkins listener to keep concerns isolated).
+     *
+     * @param {Object} painter  { id, name, teamName, currentModule, payRate, carBonus, ... }
+     */
+    async function renderPainter(painter) {
+      const activeModule = getActiveModule(painter);
+
+      // ── Header ────────────────────────────────────────────────
+      document.getElementById("painter-name").textContent = painter.name;
+      document.getElementById("painter-team").textContent = painter.teamName || "—";
+
+      const badgeLabel =
+        painter.currentModule === "master" ? "Master Painter Prime ⭐" :
+        painter.currentModule === "base"   ? "Débutant" :
+        (MODULE_DEFS[painter.currentModule]?.label ?? painter.currentModule);
+
+      document.getElementById("painter-level-badge").textContent = badgeLabel;
+      document.getElementById("painter-pay-rate").textContent =
+        `$${Number(painter.payRate ?? 0).toFixed(2)}/hr`;
+
+      // ── Module description ────────────────────────────────────
+      const modDescEl = document.getElementById("module-description");
+      if (activeModule) {
+        modDescEl.textContent =
+          `Vous travaillez sur : ${MODULE_DEFS[activeModule].label}`;
+        modDescEl.hidden = false;
+      } else if (painter.currentModule === "master") {
+        modDescEl.textContent =
+          "🏆 Niveau maximum atteint — Master Painter Prime !";
+        modDescEl.hidden = false;
+      } else {
+        modDescEl.textContent =
+          "Module 3C complété. L'admin peut activer Master Painter Prime.";
+        modDescEl.hidden = false;
+      }
+
+      // ── Streak block ──────────────────────────────────────────
+      const streakNumEl   = document.getElementById("streak-number");
+      const streakLabelEl = document.getElementById("streak-label");
+      const progressFill  = document.getElementById("streak-progress-fill");
+
+      if (activeModule) {
+        let streakCount = 0;
+        try {
+          const result = await computeStreak(painter.id, activeModule);
+          streakCount = result.count;
+        } catch (e) {
+          console.warn("[renderPainter] computeStreak error", e);
+        }
+
+        streakNumEl.textContent = `🔥 Jour ${streakCount}/${STREAK_REQUIRED}`;
+
+        if (streakCount === 0) {
+          streakLabelEl.textContent = "Commencez aujourd'hui !";
+        } else if (streakCount < STREAK_REQUIRED / 2) {
+          streakLabelEl.textContent = "Bonne lancée ! Continuez comme ça.";
+        } else if (streakCount < STREAK_REQUIRED) {
+          const left = STREAK_REQUIRED - streakCount;
+          streakLabelEl.textContent =
+            `Plus que ${left} jour${left > 1 ? "s" : ""} avant le prochain niveau !`;
+        } else {
+          streakLabelEl.textContent = "🎉 Niveau atteint !";
+        }
+
+        progressFill.style.width =
+          `${Math.min((streakCount / STREAK_REQUIRED) * 100, 100).toFixed(1)}%`;
+      } else {
+        // No active module (master or mod3c waiting for admin)
+        streakNumEl.textContent  = "🏆 Complété";
+        streakLabelEl.textContent =
+          painter.currentModule === "master"
+            ? "Tous les modules sont complétés !"
+            : "En attente de Master Painter Prime";
+        progressFill.style.width = "100%";
+      }
+
+      // ── Recent activity (async, 7 days) ───────────────────────
+      if (activeModule) {
+        await renderRecentActivity(painter.id, activeModule);
+      } else {
+        document.getElementById("recent-activity-body").innerHTML = `
+          <tr>
+            <td colspan="3" class="text-faint" style="text-align:center;padding:1rem;">
+              Aucune activité à afficher
+            </td>
+          </tr>`;
+      }
+    }
+
+    /**
+     * Render today's task checklist.
+     *
+     * Optimistic UI: tapping a task immediately toggles its visual state, then
+     * calls toggleTask() to write to Firestore. The realtime checkins listener
+     * will confirm (or revert on error) by calling this function again with
+     * fresh data from Firestore.
+     *
+     * @param {Array<{id, label}>} tasks      Active module task definitions
+     * @param {Object}             checkins   { [taskId]: { done, adminOverride, ... } }
+     * @param {string}             painterId
+     */
+    function renderChecklist(tasks, checkins, painterId) {
+      const list = document.getElementById("task-checklist");
+      list.innerHTML = "";
+
+      // No tasks → master or mod3c-waiting state
+      if (tasks.length === 0) {
+        list.innerHTML = `
+          <li class="task-placeholder">
+            <div style="font-size:2rem; margin-bottom:0.5rem;">🏆</div>
+            ${_currentPainter?.currentModule === "master"
+              ? "Vous êtes Master Painter Prime — aucune tâche à compléter."
+              : "Aucune tâche active pour le moment."}
+          </li>`;
+        return;
+      }
+
+      const today = getTodayString();
+
+      tasks.forEach((task) => {
+        const isDone   = checkins[task.id]?.done === true;
+        const isAdmin  = checkins[task.id]?.adminOverride === true;
+
+        const li = document.createElement("li");
+        li.className = `task-item${isDone ? " done" : ""}`;
+        li.dataset.taskId = task.id;
+        li.setAttribute("role", "checkbox");
+        li.setAttribute("aria-checked", String(isDone));
+        li.setAttribute("tabindex", "0");
+
+        li.innerHTML = `
+          <div class="task-checkbox" aria-hidden="true">
+            ${isDone ? CHECK_SVG : ""}
+          </div>
+          <span class="task-label">${escHtml(task.label)}</span>
+          ${isAdmin ? '<span class="badge badge-admin" style="margin-left:auto;flex-shrink:0;">Admin</span>' : ""}
+        `;
+
+        // Click / keyboard handler
+        const handleToggle = async () => {
+          if (li.classList.contains("loading")) return;
+
+          const newDone = !li.classList.contains("done");
+
+          // Optimistic update
+          li.classList.add("loading");
+          li.classList.toggle("done", newDone);
+          li.setAttribute("aria-checked", String(newDone));
+          li.querySelector(".task-checkbox").innerHTML = newDone ? CHECK_SVG : "";
+
+          try {
+            await toggleTask(painterId, task.id, today, newDone);
+            // Realtime listener will re-render; loading class removed then
+          } catch (err) {
+            console.error("[renderChecklist] toggleTask error:", err);
+            // Revert optimistic state
+            li.classList.toggle("done", !newDone);
+            li.setAttribute("aria-checked", String(!newDone));
+            li.querySelector(".task-checkbox").innerHTML = !newDone ? CHECK_SVG : "";
+          } finally {
+            li.classList.remove("loading");
+          }
+        };
+
+        li.addEventListener("click", handleToggle);
+        li.addEventListener("keydown", (e) => {
+          if (e.key === " " || e.key === "Enter") { e.preventDefault(); handleToggle(); }
+        });
+
+        list.appendChild(li);
+      });
+    }
+
+    /**
+     * Fetch and render the last 7 days of activity for this painter.
+     *
+     * For each day: query the checkins subcollection, classify it as
+     * streak / neutral / fail (using the same algorithm as streak logic),
+     * and render a table row.
+     *
+     * Days are fetched in parallel (Promise.all) for speed.
+     *
+     * @param {string} painterId
+     * @param {string} activeModuleKey  e.g. "mod2"
+     */
+    async function renderRecentActivity(painterId, activeModuleKey) {
+      const tbody = document.getElementById("recent-activity-body");
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="3" class="text-faint" style="text-align:center;padding:0.5rem;">
+            Chargement…
+          </td>
+        </tr>`;
+
+      const totalTasks = MODULE_DEFS[activeModuleKey]?.tasks.length ?? 0;
+
+      // Fetch all 7 days in parallel
+      const dayData = await Promise.all(
+        Array.from({ length: 7 }, (_, i) => {
+          const dateStr = getDateString(i);
+          return db
+            .collection("checkins")
+            .doc(painterId)
+            .collection(dateStr)
+            .get()
+            .then((snap) => ({ dateStr, docs: snap.docs }))
+            .catch(() => ({ dateStr, docs: [] }));
+        })
+      );
+
+      tbody.innerHTML = "";
+
+      dayData.forEach(({ dateStr, docs }) => {
+        const status   = classifyDay(docs, activeModuleKey);
+        const doneCount = docs.filter((d) => d.data().done === true).length;
+
+        // Date label — e.g. "lun. 14 avr."
+        const [y, m, d] = dateStr.split("-").map(Number);
+        const dateLabel = new Date(y, m - 1, d).toLocaleDateString("fr-CA", {
+          weekday: "short",
+          day:     "numeric",
+          month:   "short",
+        });
+
+        let taskCell, statusCell;
+
+        if (status === "neutral") {
+          taskCell   = `<span class="text-faint">—</span>`;
+          statusCell = `<span class="day-status-neutral">— Neutre</span>`;
+        } else if (status === "streak") {
+          taskCell   = `<span style="color:var(--color-success);">${doneCount}/${totalTasks} ✅</span>`;
+          statusCell = `<span class="day-status-streak">🔥 Streak</span>`;
+        } else {
+          taskCell   = `${doneCount}/${totalTasks}`;
+          statusCell = `<span class="day-status-fail">❌ Fail</span>`;
+        }
+
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${dateLabel}</td><td>${taskCell}</td><td>${statusCell}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // =========================================================
+    // === CHECK-IN LOGIC ===
+    // =========================================================
+
+    /**
+     * Toggle a task check-in in Firestore, then log the action and run level checks.
+     *
+     * Writes to: /checkins/{painterId}/{dateString}/{taskId}
+     * Then logs to: /activityLog
+     * Then: if done=true  → checkLevelUp  (might have just hit 14)
+     *        if done=false → checkLevelDown (might have dropped below 14)
+     *
+     * @param {string}  painterId
+     * @param {string}  taskId
+     * @param {string}  dateString    "YYYY-MM-DD"
+     * @param {boolean} done
+     * @param {boolean} [adminOverride=false]
+     */
+    async function toggleTask(painterId, taskId, dateString, done, adminOverride = false) {
+      // 1. Write check-in document
+      await db
+        .collection("checkins")
+        .doc(painterId)
+        .collection(dateString)
+        .doc(taskId)
+        .set({
+          done,
+          timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+          adminOverride,
+          adminOverrideBy: adminOverride ? "admin" : "",
+        });
+
+      // 2. Fetch fresh painter data for logging and level checks
+      const painterSnap = await db.collection("painters").doc(painterId).get();
+      if (!painterSnap.exists) {
+        console.warn("[toggleTask] Painter not found:", painterId);
+        return;
+      }
+      const painter = painterSnap.data();
+
+      // 3. Resolve task label from any module definition
+      const allTasks = Object.values(MODULE_DEFS).flatMap((m) => m.tasks);
+      const taskDef = allTasks.find((t) => t.id === taskId);
+
+      // 4. Log activity
+      await logActivity({
+        painterId,
+        painterName: painter.name,
+        taskId,
+        taskName: taskDef?.label ?? taskId,
+        action: done ? "check" : "uncheck",
+        adminOverride,
+      });
+
+      // 5. Level checks — only run if painter has an active module
+      if (done) {
+        await checkLevelUp(painterId, painter);
+      } else {
+        await checkLevelDown(painterId, painter);
+      }
+    }
+
+    /**
+     * Append an immutable entry to /activityLog.
+     * The Firestore rules prevent update/delete on this collection.
+     *
+     * @param {Object} entry
+     * @param {string} entry.painterId
+     * @param {string} entry.painterName
+     * @param {string} entry.taskId
+     * @param {string} entry.taskName
+     * @param {"check"|"uncheck"|"levelup"|"leveldown"|"force_levelup"} entry.action
+     * @param {boolean} entry.adminOverride
+     */
+    async function logActivity(entry) {
+      await db.collection("activityLog").add({
+        ...entry,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+
+    // =========================================================
+    // === LEVEL-UP LOGIC ===
+    // =========================================================
+
+    /**
+     * After a task is checked, compute the streak for the painter's active module.
+     * If the streak has reached STREAK_REQUIRED, trigger an automatic level-up.
+     *
+     * Guard: re-fetches painter data right before writing to prevent a race condition
+     * where two simultaneous check-ins both attempt to level up.
+     *
+     * @param {string} painterId
+     * @param {Object} painter  Firestore data as of the toggleTask call (may be stale)
+     */
+    async function checkLevelUp(painterId, painter) {
+      const activeModule = getActiveModule(painter);
+      if (!activeModule) return; // maxed out or master (manual only)
+
+      const { count } = await computeStreak(painterId, activeModule);
+      if (count < STREAK_REQUIRED) return;
+
+      // Re-fetch to guard against concurrent level-ups
+      const freshSnap = await db.collection("painters").doc(painterId).get();
+      const fresh = freshSnap.data();
+
+      // Abort if painter already leveled up since our initial fetch
+      if (fresh.currentModule !== painter.currentModule) return;
+
+      await triggerLevelUp(painterId, fresh, activeModule);
+    }
+
+    /**
+     * Advance a painter to the next module and update their pay rate.
+     * Called automatically when streak reaches 14, or manually via forceLevelUp.
+     *
+     * Writes to: /painters/{painterId}  { currentModule, payRate }
+     * Logs:      /activityLog           action: "levelup" or "force_levelup"
+     * UI:        showLevelUpModal()
+     *
+     * @param {string} painterId
+     * @param {Object} painter           Current painter data
+     * @param {string} moduleCompleted   The module key they just finished (becomes new currentModule)
+     * @param {boolean} [force=false]    True when triggered by admin force-level-up
+     */
+    async function triggerLevelUp(painterId, painter, moduleCompleted, force = false) {
+      const newCurrentModule = moduleCompleted;
+      const baseRate = PAY_RATES[newCurrentModule] ?? painter.payRate;
+      const newPayRate = baseRate + (painter.carBonus ? CAR_BONUS : 0);
+
+      await db.collection("painters").doc(painterId).update({
+        currentModule: newCurrentModule,
+        payRate: newPayRate,
+      });
+
+      const modDef = MODULE_DEFS[newCurrentModule];
+      await logActivity({
+        painterId,
+        painterName: painter.name,
+        taskId: "",
+        taskName: `Module complété : ${modDef?.label ?? newCurrentModule}`,
+        action: force ? "force_levelup" : "levelup",
+        adminOverride: force,
+      });
+
+      // Build an updated painter object for the modal (Firestore write is async,
+      // so we pass the new values directly instead of re-fetching)
+      showLevelUpModal(
+        { ...painter, currentModule: newCurrentModule, payRate: newPayRate },
+        newCurrentModule
+      );
+    }
+
+    /**
+     * After a task is unchecked, recompute the streak for the module the painter
+     * most recently completed. If it dropped below STREAK_REQUIRED, revert them
+     * to the previous module and pay rate.
+     *
+     * Which module to check: painter.currentModule — this is the module whose tasks
+     * the painter completed to earn their current level. If those tasks now fall
+     * below 14 streak days, the level-up is reversed.
+     *
+     * Special cases:
+     *   - painter.currentModule = "base"   → nothing to revert (starting point)
+     *   - painter.currentModule = "master" → master is manual-only, never auto-reverted
+     *
+     * @param {string} painterId
+     * @param {Object} painter  Firestore data as of the toggleTask call
+     */
+    async function checkLevelDown(painterId, painter) {
+      const currentIdx = MODULE_ORDER.indexOf(painter.currentModule);
+      // "base" (idx=0) has no prerequisite module to revert to
+      if (currentIdx <= 0) return;
+      // Master Painter Prime is applied manually — admin must explicitly revert it
+      if (painter.currentModule === "master") return;
+
+      // The tasks that earned the current level belong to painter.currentModule
+      const completedModule = painter.currentModule;
+      const { count } = await computeStreak(painterId, completedModule);
+
+      if (count < STREAK_REQUIRED) {
+        const prevModule = MODULE_DEFS[completedModule]?.prev;
+        if (prevModule !== undefined) {
+          await revertModule(painterId, painter, prevModule);
+        }
+      }
+    }
+
+    /**
+     * Revert a painter to a previous module after a streak drop.
+     * Restores pay rate (base for that module + car bonus if applicable).
+     *
+     * @param {string} painterId
+     * @param {Object} painter    Current painter data (before revert)
+     * @param {string} prevModule The module key to revert to
+     */
+    async function revertModule(painterId, painter, prevModule) {
+      const baseRate = PAY_RATES[prevModule] ?? painter.payRate;
+      const newPayRate = baseRate + (painter.carBonus ? CAR_BONUS : 0);
+
+      await db.collection("painters").doc(painterId).update({
+        currentModule: prevModule,
+        payRate: newPayRate,
+      });
+
+      await logActivity({
+        painterId,
+        painterName: painter.name,
+        taskId: "",
+        taskName: `Niveau rétrogradé : ${painter.currentModule} → ${prevModule}`,
+        action: "leveldown",
+        adminOverride: false,
+      });
+    }
+
+    /**
+     * Display the level-up celebration modal and fire a confetti burst.
+     * This is called both for automatic level-ups and admin force-level-ups.
+     *
+     * @param {Object} painter    Painter data AFTER the level-up (updated values)
+     * @param {string} newModule  The module key that was just unlocked
+     */
+    function showLevelUpModal(painter, newModule) {
+      const modDef = MODULE_DEFS[newModule];
+      const payDisplay = `$${painter.payRate.toFixed(2)}/hr`;
+
+      document.getElementById("levelup-title").textContent = "🎉 Niveau débloqué !";
+      document.getElementById("levelup-message").textContent =
+        `${painter.name} a débloqué ${modDef?.label ?? newModule} !`;
+      document.getElementById("levelup-pay").textContent = payDisplay;
+
+      openModal("modal-levelup");
+
+      // Confetti burst — CDN loaded with defer, so check availability
+      if (typeof confetti !== "undefined") {
+        confetti({
+          particleCount: 160,
+          spread: 90,
+          origin: { y: 0.55 },
+          colors: ["#D4001A", "#ff1a35", "#ffffff", "#ffcc00", "#ff6b00"],
+        });
+        // Second burst after 400ms for a bigger effect
+        setTimeout(() => {
+          confetti({
+            particleCount: 80,
+            spread: 120,
+            origin: { y: 0.4 },
+            colors: ["#D4001A", "#ff1a35", "#ffffff"],
+          });
+        }, 400);
+      }
+    }
+
+    // =========================================================
+    // === STREAK & LEVEL-UP TESTS ===
+    // Run from browser console: _runStreakTests()
+    // Tests are pure (no Firestore calls) — they exercise classifyDay,
+    // computeStreakFromDays, getActiveModule, and getModuleCompletionCount.
+    // =========================================================
+
+    window._runStreakTests = function () {
+      let passed = 0;
+      let failed = 0;
+
+      function assert(name, condition) {
+        if (condition) {
+          console.log(`%c✅ ${name}`, "color: #4caf50");
+          passed++;
+        } else {
+          console.error(`❌ ${name}`);
+          failed++;
+        }
+      }
+
+      /**
+       * Build a days array (newest-first) from a list of statuses.
+       * First element = today, second = yesterday, etc.
+       */
+      function mkDays(...statuses) {
+        return statuses.map((s, i) => ({ date: `day-${i}`, status: s }));
+      }
+
+      /**
+       * Build mock Firestore docs for classifyDay tests.
+       * Each doc has an id (taskId) and a data() method returning { done }.
+       */
+      function mkDocs(taskDoneMap) {
+        return Object.entries(taskDoneMap).map(([id, done]) => ({
+          id,
+          data: () => ({ done }),
+        }));
+      }
+
+      console.group("%cPaintRank Streak & Level-Up Tests", "font-weight:bold;font-size:14px");
+
+      // -------------------------------------------------------
+      // A. computeStreakFromDays — core algorithm
+      // -------------------------------------------------------
+      console.group("A. computeStreakFromDays");
+
+      assert(
+        "Empty array → 0",
+        computeStreakFromDays([]) === 0
+      );
+
+      assert(
+        "All neutral → 0 (neutral days never count)",
+        computeStreakFromDays(mkDays("neutral", "neutral", "neutral")) === 0
+      );
+
+      assert(
+        "All fail → 0 (fail today, stop immediately)",
+        computeStreakFromDays(mkDays("fail", "streak", "streak")) === 0
+      );
+
+      assert(
+        "14 consecutive streak days → 14",
+        computeStreakFromDays(mkDays(
+          "streak","streak","streak","streak","streak","streak","streak",
+          "streak","streak","streak","streak","streak","streak","streak"
+        )) === 14
+      );
+
+      assert(
+        "13 streak days → 13 (not yet at 14)",
+        computeStreakFromDays(mkDays(
+          "streak","streak","streak","streak","streak","streak","streak",
+          "streak","streak","streak","streak","streak","streak"
+        )) === 13
+      );
+
+      assert(
+        "Neutral today, then 5 streak → count = 5 (neutral at start skipped)",
+        computeStreakFromDays(mkDays("neutral", "streak", "streak", "streak", "streak", "streak")) === 5
+      );
+
+      assert(
+        "3 neutral + 9 streak = 9 (neutrals in middle skipped)",
+        computeStreakFromDays(mkDays(
+          "streak","streak","streak","streak",
+          "neutral","neutral","neutral",
+          "streak","streak","streak","streak","streak"
+        )) === 9
+      );
+
+      assert(
+        "Fail at position 3, then 5 older streaks → count = 3 (stops at fail)",
+        computeStreakFromDays(mkDays("streak","streak","streak","fail","streak","streak","streak","streak","streak")) === 3
+      );
+
+      assert(
+        "5 streaks since last fail (fail further back) → 5",
+        computeStreakFromDays(mkDays("streak","streak","streak","streak","streak","fail","streak","streak","streak")) === 5
+      );
+
+      assert(
+        "Two fail days — only streaks since the MOST RECENT fail count",
+        // newest-first: streak, streak, fail, streak, streak, streak, fail, streak
+        // Walk: streak(1), streak(2), fail → stop. Count = 2.
+        computeStreakFromDays(mkDays("streak","streak","fail","streak","streak","streak","fail","streak")) === 2
+      );
+
+      assert(
+        "Neutral between fail and streaks — still stops at fail",
+        // neutral, fail, streak, streak → walk: neutral(skip), fail → stop. Count = 0.
+        computeStreakFromDays(mkDays("neutral","fail","streak","streak")) === 0
+      );
+
+      assert(
+        "Streak + neutral + streak (no fail) → all streaks counted",
+        // 3 streak, 2 neutral, 3 streak → count = 6
+        computeStreakFromDays(mkDays("streak","streak","streak","neutral","neutral","streak","streak","streak")) === 6
+      );
+
+      assert(
+        "Mixed: 5 streak, 3 neutral, 1 fail, 8 streak → count = 5 (since last fail)",
+        // newest-first: 5 streak, 3 neutral, 1 fail, 8 older streaks
+        computeStreakFromDays([
+          ...mkDays("streak","streak","streak","streak","streak").slice(0,5),
+          ...mkDays("neutral","neutral","neutral").slice(0,3),
+          { date: "day-8", status: "fail" },
+          ...Array(8).fill(null).map((_,i) => ({ date: `day-${9+i}`, status: "streak" })),
+        ]) === 5
+      );
+
+      console.groupEnd();
+
+      // -------------------------------------------------------
+      // B. classifyDay — day classification
+      // -------------------------------------------------------
+      console.group("B. classifyDay");
+
+      assert(
+        "No docs → neutral",
+        classifyDay([], "mod1") === "neutral"
+      );
+
+      assert(
+        "Empty docs array, unknown module → neutral",
+        classifyDay([], "nonexistent") === "neutral"
+      );
+
+      const mod1Tasks = MODULE_DEFS.mod1.tasks; // 4 tasks
+
+      assert(
+        "All 4 mod1 tasks done=true → streak",
+        classifyDay(
+          mkDocs(Object.fromEntries(mod1Tasks.map((t) => [t.id, true]))),
+          "mod1"
+        ) === "streak"
+      );
+
+      assert(
+        "3/4 mod1 tasks done=true (one missing) → fail",
+        classifyDay(
+          mkDocs(Object.fromEntries(mod1Tasks.slice(0, 3).map((t) => [t.id, true]))),
+          "mod1"
+        ) === "fail"
+      );
+
+      assert(
+        "All tasks present but done=false → fail",
+        classifyDay(
+          mkDocs(Object.fromEntries(mod1Tasks.map((t) => [t.id, false]))),
+          "mod1"
+        ) === "fail"
+      );
+
+      assert(
+        "Mixed done: some true, some false → fail",
+        classifyDay(
+          mkDocs({ m1_t1: true, m1_t2: false, m1_t3: true, m1_t4: false }),
+          "mod1"
+        ) === "fail"
+      );
+
+      assert(
+        "All 4 mod1 tasks done=true but wrong module key checked → fail (task ids don't match)",
+        // mod2 has different task ids — mod1 docs won't satisfy mod2 tasks
+        classifyDay(
+          mkDocs(Object.fromEntries(mod1Tasks.map((t) => [t.id, true]))),
+          "mod2"
+        ) === "fail"
+      );
+
+      const mod3aT = MODULE_DEFS.mod3a.tasks; // 3 tasks
+      assert(
+        "All 3 mod3a tasks done=true → streak",
+        classifyDay(
+          mkDocs(Object.fromEntries(mod3aT.map((t) => [t.id, true]))),
+          "mod3a"
+        ) === "streak"
+      );
+
+      assert(
+        "Extra/unknown taskId in docs does not prevent streak (only required tasks checked)",
+        classifyDay(
+          [
+            ...mkDocs(Object.fromEntries(mod3aT.map((t) => [t.id, true]))),
+            { id: "unknown_task", data: () => ({ done: false }) },
+          ],
+          "mod3a"
+        ) === "streak"
+      );
+
+      console.groupEnd();
+
+      // -------------------------------------------------------
+      // C. getActiveModule — module progression
+      // -------------------------------------------------------
+      console.group("C. getActiveModule");
+
+      assert("base → active = mod1",          getActiveModule({ currentModule: "base" })   === "mod1");
+      assert("mod1 → active = mod2",          getActiveModule({ currentModule: "mod1" })   === "mod2");
+      assert("mod2 → active = mod3a",         getActiveModule({ currentModule: "mod2" })   === "mod3a");
+      assert("mod3a → active = mod3b",        getActiveModule({ currentModule: "mod3a" })  === "mod3b");
+      assert("mod3b → active = mod3c",        getActiveModule({ currentModule: "mod3b" })  === "mod3c");
+      assert("mod3c → null (master=manual)",  getActiveModule({ currentModule: "mod3c" })  === null);
+      assert("master → null (already max)",   getActiveModule({ currentModule: "master" }) === null);
+      assert("unknown → null (safe default)", getActiveModule({ currentModule: "???" })    === null);
+
+      console.groupEnd();
+
+      // -------------------------------------------------------
+      // D. getModuleCompletionCount — leaderboard ranking
+      // -------------------------------------------------------
+      console.group("D. getModuleCompletionCount");
+
+      assert("base   → 0", getModuleCompletionCount({ currentModule: "base" })   === 0);
+      assert("mod1   → 1", getModuleCompletionCount({ currentModule: "mod1" })   === 1);
+      assert("mod2   → 2", getModuleCompletionCount({ currentModule: "mod2" })   === 2);
+      assert("mod3a  → 3", getModuleCompletionCount({ currentModule: "mod3a" })  === 3);
+      assert("mod3b  → 4", getModuleCompletionCount({ currentModule: "mod3b" })  === 4);
+      assert("mod3c  → 5", getModuleCompletionCount({ currentModule: "mod3c" })  === 5);
+      assert("master → 6", getModuleCompletionCount({ currentModule: "master" }) === 6);
+
+      console.groupEnd();
+
+      // -------------------------------------------------------
+      // E. Edge cases — level-up threshold boundary
+      // -------------------------------------------------------
+      console.group("E. Level-up threshold boundary");
+
+      assert(
+        "13 streak days < STREAK_REQUIRED (14) → no level-up",
+        computeStreakFromDays(
+          Array(13).fill({ date: "x", status: "streak" })
+        ) < STREAK_REQUIRED
+      );
+
+      assert(
+        "14 streak days === STREAK_REQUIRED → level-up condition met",
+        computeStreakFromDays(
+          Array(14).fill({ date: "x", status: "streak" })
+        ) >= STREAK_REQUIRED
+      );
+
+      assert(
+        "14 streaks with neutrals interspersed still triggers (neutrals skipped)",
+        // 14 streak + 10 neutral mixed = still 14 streak count
+        computeStreakFromDays([
+          { date: "d0",  status: "streak" }, { date: "d1",  status: "neutral" },
+          { date: "d2",  status: "streak" }, { date: "d3",  status: "neutral" },
+          { date: "d4",  status: "streak" }, { date: "d5",  status: "neutral" },
+          { date: "d6",  status: "streak" }, { date: "d7",  status: "neutral" },
+          { date: "d8",  status: "streak" }, { date: "d9",  status: "neutral" },
+          { date: "d10", status: "streak" }, { date: "d11", status: "neutral" },
+          { date: "d12", status: "streak" }, { date: "d13", status: "neutral" },
+          { date: "d14", status: "streak" }, { date: "d15", status: "neutral" },
+          { date: "d16", status: "streak" }, { date: "d17", status: "neutral" },
+          { date: "d18", status: "streak" }, { date: "d19", status: "neutral" },
+          { date: "d20", status: "streak" }, { date: "d21", status: "neutral" },
+          { date: "d22", status: "streak" }, { date: "d23", status: "neutral" },
+        ]) >= STREAK_REQUIRED
+      );
+
+      assert(
+        "14 streaks then fail then more streaks → count = 14 (stops at fail)",
+        // Scenario: painter had 14 streak days, then a fail day, then 10 more streak days earlier
+        // The fail acts as the reset point. The 14 newer streaks since the fail = 14.
+        computeStreakFromDays([
+          ...Array(14).fill({ date: "x", status: "streak" }),
+          { date: "y", status: "fail" },
+          ...Array(10).fill({ date: "z", status: "streak" }),
+        ]) === 14
+      );
+
+      assert(
+        "Reversal scenario: 14 → 1 uncheck → streak drops to 13",
+        // Simulate: painter had 14 streaks, one is unchecked (now fail for that day)
+        // After recompute: day-0 to day-12 = 13 streak, day-13 = fail → count = 13
+        computeStreakFromDays([
+          ...Array(13).fill({ date: "x", status: "streak" }),
+          { date: "y", status: "fail" }, // the day that was unchecked
+        ]) === 13
+      );
+
+      console.groupEnd();
+
+      // -------------------------------------------------------
+      // Summary
+      // -------------------------------------------------------
+      const total = passed + failed;
+      const style = failed === 0
+        ? "color:#4caf50;font-weight:bold"
+        : "color:#ff1a35;font-weight:bold";
+      console.log(`%c\n${passed}/${total} tests passed${failed > 0 ? ` (${failed} failed)` : " ✅"}`, style);
+      console.groupEnd();
+
+      return { passed, failed, total };
+    };
+
+    // =========================================================
+    // === ADMIN AUTH ===
+    // =========================================================
+
+    // Session auth state — memory only, not persisted
+    let adminAuthed = false;
+    let _adminPainters = [];   // last painters snapshot while admin is open
+    let _payrollRows = [];     // last computed payroll rows for CSV export
+
+    function checkPin(inputValue) {
+      const errEl = document.getElementById("pin-error");
+      if (inputValue.trim() === ADMIN_PIN) {
+        adminAuthed = true;
+        errEl.textContent = "";
+        showAdminPanel();
+      } else {
+        errEl.textContent = "PIN incorrect. Réessayez.";
+        document.getElementById("pin-input").select();
+      }
+    }
+
+    function showAdminPanel() {
+      document.getElementById("admin-pin-screen").hidden = true;
+      document.getElementById("admin-panel").hidden = false;
+      // Switch to painters tab and start the realtime listener
+      _switchAdminTab("painters");
+      const unsub = listenPainters((painters) => {
+        _adminPainters = painters;
+        renderPaintersTab(painters);
+        _populateAdminPainterSelects(painters);
+      });
+      _unsubscribers.push(unsub);
+    }
+
+    function lockAdmin() {
+      adminAuthed = false;
+      unsubscribeAll();
+      document.getElementById("admin-panel").hidden = true;
+      document.getElementById("admin-pin-screen").hidden = false;
+      document.getElementById("pin-input").value = "";
+      document.getElementById("pin-error").textContent = "";
+    }
+
+    /**
+     * Internal helper — switch the visible admin tab panel and update button states.
+     * @param {"painters"|"activity"|"overrides"|"payroll"} tabName
+     */
+    function _switchAdminTab(tabName) {
+      document.querySelectorAll(".admin-tab-btn").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.tab === tabName);
+      });
+      document.querySelectorAll(".admin-tab-panel").forEach((panel) => {
+        panel.hidden = panel.id !== "tab-" + tabName;
+      });
+    }
+
+    /**
+     * Populate the painter <select> elements in the Activity and Overrides tabs.
+     * @param {Array} painters
+     */
+    function _populateAdminPainterSelects(painters) {
+      const sorted = [...painters].sort((a, b) => a.name.localeCompare(b.name));
+
+      // Activity log filter
+      const filterSel = document.getElementById("activity-filter-painter");
+      const filterCurrent = filterSel.value;
+      filterSel.innerHTML = '<option value="">Tous les peintres</option>' +
+        sorted.map((p) => `<option value="${p.id}"${p.id === filterCurrent ? " selected" : ""}>${escHtml(p.name)}</option>`).join("");
+
+      // Override painter select
+      const ovSel = document.getElementById("override-painter-select");
+      const ovCurrent = ovSel.value;
+      ovSel.innerHTML = '<option value="">— Choisir —</option>' +
+        sorted.map((p) => `<option value="${p.id}"${p.id === ovCurrent ? " selected" : ""}>${escHtml(p.name)}</option>`).join("");
+    }
+
+    // =========================================================
+    // === ADMIN — PAINTERS & TEAMS ===
+    // =========================================================
+
+    /**
+     * Render the painters management tab.
+     * @param {Array} painters
+     */
+    function renderPaintersTab(painters) {
+      const container = document.getElementById("painters-list");
+      if (!container) return;
+
+      const sorted = [...painters].sort((a, b) => a.name.localeCompare(b.name));
+
+      // Preserve form visibility state across re-renders (realtime listener fires often)
+      const prevFormVisible = document.getElementById("add-painter-form-el")
+        ? !document.getElementById("add-painter-form-el").hidden
+        : false;
+
+      // Add-painter form (always included so it can be toggled)
+      const formHtml = `
+          <div class="add-painter-form" id="add-painter-form-el" hidden>
+            <div class="form-group">
+              <label class="form-label" for="new-painter-name">Prénom</label>
+              <input class="form-input" id="new-painter-name" type="text" placeholder="alex" maxlength="40" />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="new-painter-team">Équipe</label>
+              <input class="form-input" id="new-painter-team" type="text" placeholder="Équipe Rouge" maxlength="60" />
+            </div>
+            <div style="display:flex;align-items:flex-end;padding-bottom:1rem;gap:0.5rem;">
+              <button class="btn btn-primary btn-sm" id="add-painter-confirm-btn">Créer</button>
+              <button class="btn btn-secondary btn-sm" id="add-painter-cancel-btn">Annuler</button>
+            </div>
+          </div>`;
+
+      const emptyState = sorted.length === 0
+        ? '<p class="text-muted text-sm" style="padding:1.5rem 0.5rem;">Aucun peintre. Cliquez sur "+ Ajouter" pour commencer.</p>'
+        : "";
+
+      const rowsHtml = sorted.map((p) => {
+        const pay = (PAY_RATES[p.currentModule] ?? 17) + (p.carBonus ? CAR_BONUS : 0);
+        const activeKey = getActiveModule(p);
+        const moduleLabel = activeKey
+          ? (MODULE_DEFS[activeKey]?.label ?? activeKey)
+          : (p.currentModule === "master" ? "Master Painter Prime" : MODULE_DEFS[p.currentModule]?.label ?? p.currentModule);
+
+        const masterDisabled = p.currentModule !== "mod3c" && p.currentModule !== "master";
+
+        return `
+          <div class="painter-row" data-painter-id="${p.id}">
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:center;gap:0.5rem;">
+                <span class="painter-row-name" style="font-weight:600;">${escHtml(p.name)}</span>
+                <button class="btn btn-secondary btn-sm" style="padding:0.2rem 0.5rem;font-size:0.75rem;"
+                  onclick="(function(btn){
+                    const row = btn.closest('.painter-row');
+                    const nameSpan = row.querySelector('.painter-row-name');
+                    const inp = document.createElement('input');
+                    inp.className='painter-row-name-input';
+                    inp.value = nameSpan.textContent;
+                    nameSpan.replaceWith(inp);
+                    btn.textContent='✓';
+                    btn.onclick = function(){
+                      const v = inp.value.trim();
+                      if(v) editPainterName('${p.id}', v);
+                    };
+                    inp.focus();
+                    inp.addEventListener('keydown', e => { if(e.key==='Enter') btn.click(); });
+                  })(this)">✏</button>
+              </div>
+              <div style="font-size:0.8rem;color:var(--color-text-muted);margin-top:0.15rem;">${escHtml(p.teamName ?? "")} · ${escHtml(moduleLabel)} · <strong>$${pay.toFixed(2)}/hr</strong></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:1rem;flex-shrink:0;margin-left:0.75rem;">
+              <label style="display:flex;flex-direction:column;align-items:center;gap:0.2rem;font-size:0.7rem;color:var(--color-text-muted);">
+                🚗
+                <label class="toggle">
+                  <input type="checkbox" ${p.carBonus ? "checked" : ""}
+                    onchange="toggleCarBonus('${p.id}', this.checked)" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </label>
+              <label style="display:flex;flex-direction:column;align-items:center;gap:0.2rem;font-size:0.7rem;color:var(--color-text-muted);${masterDisabled ? 'opacity:0.4;pointer-events:none;' : ''}">
+                ⭐
+                <label class="toggle">
+                  <input type="checkbox" ${p.currentModule === "master" ? "checked" : ""}
+                    ${masterDisabled ? "disabled" : ""}
+                    onchange="toggleMasterBonus('${p.id}', this.checked)" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </label>
+              <button class="btn btn-secondary btn-sm" style="color:var(--color-error);border-color:var(--color-error);"
+                onclick="removePainter('${p.id}')">✕</button>
+            </div>
+          </div>`;
+      }).join("");
+
+      container.innerHTML = formHtml + emptyState + rowsHtml;
+
+      // Restore form visibility state (the form is always hidden in innerHTML above)
+      if (prevFormVisible) {
+        const formEl = document.getElementById("add-painter-form-el");
+        if (formEl) formEl.hidden = false;
+      }
+
+      // Wire up the "add" button (only once — the button is outside painters-list so it persists)
+      const addBtn = document.getElementById("add-painter-btn");
+      if (addBtn && !addBtn._wired) {
+        addBtn._wired = true;
+        addBtn.addEventListener("click", () => {
+          const form = document.getElementById("add-painter-form-el");
+          if (form) form.hidden = !form.hidden;
+        });
+      }
+      const confirmBtn = document.getElementById("add-painter-confirm-btn");
+      if (confirmBtn) {
+        confirmBtn.addEventListener("click", () => {
+          const name = document.getElementById("new-painter-name").value.trim();
+          const team = document.getElementById("new-painter-team").value.trim();
+          if (!name) { alert("Le prénom est requis."); return; }
+          addPainter(name, team || "Sans équipe");
+        });
+      }
+      const cancelBtn = document.getElementById("add-painter-cancel-btn");
+      if (cancelBtn) {
+        cancelBtn.addEventListener("click", () => {
+          const form = document.getElementById("add-painter-form-el");
+          if (form) form.hidden = true;
+        });
+      }
+    }
+
+    /**
+     * Add a new painter to Firestore.
+     * @param {string} name
+     * @param {string} teamName
+     */
+    async function addPainter(name, teamName) {
+      if (_adminPainters.length >= 20) {
+        alert("Maximum 20 peintres actifs. Supprimez un peintre avant d'en ajouter un nouveau.");
+        return;
+      }
+      try {
+        await db.collection("painters").add({
+          name: name.toLowerCase(),
+          teamName,
+          currentModule: "base",
+          payRate: PAY_RATES.base,
+          carBonus: false,
+          masterBonus: false,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        });
+        // Clear form
+        document.getElementById("new-painter-name").value = "";
+        document.getElementById("new-painter-team").value = "";
+        const form = document.getElementById("add-painter-form-el");
+        if (form) form.hidden = true;
+        await logActivity({
+          painterId: "admin",
+          painterName: "admin",
+          taskId: "add_painter",
+          taskName: `Peintre ajouté : ${name}`,
+          action: "check",
+          adminOverride: true,
+        });
+      } catch (err) {
+        console.error("[addPainter]", err);
+        alert("Erreur lors de l'ajout du peintre.");
+      }
+    }
+
+    /**
+     * Remove a painter from Firestore (after confirmation).
+     * @param {string} painterId
+     */
+    async function removePainter(painterId) {
+      const painter = _adminPainters.find((p) => p.id === painterId);
+      const pName = painter ? escHtml(painter.name) : painterId;
+      openConfirm(
+        `Supprimer le peintre "${pName}" ? Cette action est irréversible.`,
+        async () => {
+          try {
+            await db.collection("painters").doc(painterId).delete();
+          } catch (err) {
+            console.error("[removePainter]", err);
+            alert("Erreur lors de la suppression.");
+          }
+        }
+      );
+    }
+
+    /**
+     * Edit a painter's name inline.
+     * @param {string} painterId
+     * @param {string} newName
+     */
+    async function editPainterName(painterId, newName) {
+      try {
+        await db.collection("painters").doc(painterId).update({ name: newName.toLowerCase() });
+      } catch (err) {
+        console.error("[editPainterName]", err);
+        alert("Erreur lors de la mise à jour du nom.");
+      }
+    }
+
+    /**
+     * Toggle the car bonus for a painter (+$1.00).
+     * @param {string} painterId
+     * @param {boolean} enabled
+     */
+    async function toggleCarBonus(painterId, enabled) {
+      try {
+        const snap = await db.collection("painters").doc(painterId).get();
+        const p = snap.data();
+        const base = PAY_RATES[p.currentModule] ?? PAY_RATES.base;
+        const newRate = enabled ? base + CAR_BONUS : base;
+        await db.collection("painters").doc(painterId).update({
+          carBonus: enabled,
+          payRate: newRate,
+        });
+        await logActivity({
+          painterId,
+          painterName: p.name,
+          taskId: "car_bonus",
+          taskName: enabled ? "Bonus auto activé" : "Bonus auto désactivé",
+          action: enabled ? "check" : "uncheck",
+          adminOverride: true,
+        });
+      } catch (err) {
+        console.error("[toggleCarBonus]", err);
+      }
+    }
+
+    /**
+     * Toggle Master Painter Prime (admin manual only, requires mod3c completed).
+     * @param {string} painterId
+     * @param {boolean} enabled
+     */
+    async function toggleMasterBonus(painterId, enabled) {
+      try {
+        const snap = await db.collection("painters").doc(painterId).get();
+        const p = snap.data();
+        if (enabled && p.currentModule !== "mod3c") {
+          alert("Le peintre doit avoir complété le Module 3C avant d'accéder au niveau Master.");
+          return;
+        }
+        if (enabled) {
+          await triggerLevelUp(painterId, p, "mod3c", true);
+        } else {
+          // Revert from master → mod3c
+          await revertModule(painterId, { ...p, currentModule: "master" }, "mod3c");
+        }
+      } catch (err) {
+        console.error("[toggleMasterBonus]", err);
+      }
+    }
+
+    // =========================================================
+    // === ADMIN — ACTIVITY LOG ===
+    // =========================================================
+
+    /**
+     * Render the activity log tab.
+     * @param {string|null} filterPainterId - filter by painter, or null for all
+     */
+    async function renderActivityTab(filterPainterId = null) {
+      const container = document.getElementById("activity-log-list");
+      if (!container) return;
+      container.innerHTML = '<p class="text-muted text-sm">Chargement…</p>';
+
+      try {
+        let query = db.collection("activityLog").orderBy("timestamp", "desc").limit(200);
+        const snap = await query.get();
+
+        let docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+        if (filterPainterId) {
+          docs = docs.filter((d) => d.painterId === filterPainterId);
+        }
+
+        if (docs.length === 0) {
+          container.innerHTML = '<p class="text-muted text-sm">Aucune activité enregistrée.</p>';
+          return;
+        }
+
+        const actionLabels = {
+          check:         "✅ Coché",
+          uncheck:       "❌ Décoché",
+          levelup:       "⬆ Niveau sup.",
+          leveldown:     "⬇ Niveau inf.",
+          force_levelup: "⬆ Forcé",
+        };
+
+        container.innerHTML = docs.map((row) => {
+          const ts = row.timestamp?.toDate ? row.timestamp.toDate() : new Date();
+          const timeStr = ts.toLocaleDateString("fr-CA", { month: "short", day: "numeric" })
+            + " " + ts.toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" });
+          const action = row.action ?? "check";
+          const label = actionLabels[action] ?? action;
+          const adminBadge = row.adminOverride
+            ? '<span style="font-size:0.7rem;background:var(--color-primary-highlight);color:var(--color-primary);padding:0.1rem 0.35rem;border-radius:4px;margin-left:0.4rem;">admin</span>'
+            : "";
+          return `
+            <div class="activity-row">
+              <span class="activity-time">${escHtml(timeStr)}</span>
+              <span class="activity-badge ${escHtml(action)}">${label}</span>
+              <span style="flex:1;min-width:0;">
+                <strong>${escHtml(row.painterName ?? "")}</strong>${adminBadge}
+                <span style="color:var(--color-text-muted);"> — ${escHtml(row.taskName ?? "")}</span>
+              </span>
+            </div>`;
+        }).join("");
+      } catch (err) {
+        console.error("[renderActivityTab]", err);
+        container.innerHTML = '<p style="color:var(--color-error);">Erreur de chargement.</p>';
+      }
+    }
+
+    // =========================================================
+    // === ADMIN OVERRIDES ===
+    // =========================================================
+
+    /**
+     * Render the 30-day override grid for a painter.
+     * Shows each day as a collapsible block with per-task checkboxes.
+     * @param {string} painterId
+     * @param {Object} painter
+     */
+    async function build30DayGrid(painterId, painter) {
+      const container = document.getElementById("override-calendar-container");
+      if (!container) return;
+      container.innerHTML = '<p class="text-muted text-sm">Chargement…</p>';
+
+      const activeKey = getActiveModule(painter);
+      const tasks = activeKey ? (MODULE_DEFS[activeKey]?.tasks ?? []) : [];
+
+      // Fetch the last 30 days in parallel
+      const dayCount = 30;
+      const dateStrings = Array.from({ length: dayCount }, (_, i) => getDateString(i));
+
+      const daySnaps = await Promise.all(
+        dateStrings.map((ds) =>
+          db.collection("checkins").doc(painterId).collection(ds).get()
+            .then((snap) => ({ dateString: ds, docs: snap.docs }))
+            .catch(() => ({ dateString: ds, docs: [] }))
+        )
+      );
+
+      if (tasks.length === 0) {
+        container.innerHTML = `<p class="text-muted text-sm">Ce peintre est au niveau ${escHtml(painter.currentModule)} — aucun module actif à afficher.</p>`;
+        return;
+      }
+
+      const months = ["jan", "fév", "mars", "avr", "mai", "juin", "juil", "aoû", "sep", "oct", "nov", "déc"];
+
+      const html = daySnaps.map(({ dateString, docs }) => {
+        const checkinMap = {};
+        docs.forEach((d) => { checkinMap[d.id] = d.data(); });
+
+        const dayType = classifyDay(docs, activeKey);
+        const statusEmoji = { streak: "🔥", neutral: "—", fail: "❌" }[dayType] ?? "";
+
+        // Parse YYYY-MM-DD
+        const [, , dd] = dateString.split("-");
+        const dateObj = new Date(dateString + "T00:00:00");
+        const label = `${parseInt(dd, 10)} ${months[dateObj.getMonth()]}`;
+
+        const taskRowsHtml = tasks.map((task) => {
+          const done = checkinMap[task.id]?.done === true;
+          const adminFlag = checkinMap[task.id]?.adminOverride ? " (admin)" : "";
+          return `
+            <div class="override-task-row"
+              data-date="${dateString}"
+              data-task-id="${task.id}"
+              data-done="${done}"
+              onclick="adminToggleTask('${painterId}', '${dateString}', '${task.id}', this.dataset.done === 'true')">
+              <span style="flex:1;font-size:0.875rem;">${escHtml(task.label)}${adminFlag ? '<span style="font-size:0.7rem;color:var(--color-text-faint);margin-left:0.35rem;">admin</span>' : ""}</span>
+              <span class="override-task-check ${done ? "checked" : ""}">${done ? "✓" : ""}</span>
+            </div>`;
+        }).join("");
+
+        return `
+          <div class="override-day-block">
+            <div class="override-day-header">
+              <span>${label}</span>
+              <span class="day-status">${statusEmoji} ${dayType}</span>
+            </div>
+            ${taskRowsHtml}
+          </div>`;
+      }).join("");
+
+      container.innerHTML = html;
+    }
+
+    /**
+     * Admin toggles a specific task on a specific day (logged as adminOverride).
+     * @param {string} painterId
+     * @param {string} dateString
+     * @param {string} taskId
+     * @param {boolean} currentDone
+     */
+    async function adminToggleTask(painterId, dateString, taskId, currentDone) {
+      // Find the clicked row and mark loading
+      const rowEl = document.querySelector(
+        `.override-task-row[data-date="${dateString}"][data-task-id="${taskId}"]`
+      );
+      if (rowEl) rowEl.classList.add("loading");
+
+      try {
+        await toggleTask(painterId, taskId, dateString, !currentDone, true);
+        // Refresh the grid after toggle
+        const painter = _adminPainters.find((p) => p.id === painterId);
+        if (painter) await build30DayGrid(painterId, painter);
+      } catch (err) {
+        console.error("[adminToggleTask]", err);
+        if (rowEl) rowEl.classList.remove("loading");
+      }
+    }
+
+    /**
+     * Admin forces a level up (with confirmation modal).
+     * @param {string} painterId
+     * @param {Object} painter
+     */
+    async function forceLevelUp(painterId, painter) {
+      const activeKey = getActiveModule(painter);
+      // For Master: activeKey is null but currentModule is "mod3c"
+      const targetKey = activeKey ?? (painter.currentModule === "mod3c" ? "master" : null);
+
+      if (!targetKey) {
+        alert("Ce peintre est déjà au niveau maximum.");
+        return;
+      }
+
+      const targetLabel = targetKey === "master"
+        ? "Master Painter Prime"
+        : MODULE_DEFS[targetKey]?.label ?? targetKey;
+      const bump = MODULE_DEFS[targetKey]?.payBump
+        ?? ((PAY_RATES[targetKey] ?? 0) - (PAY_RATES[painter.currentModule] ?? 0));
+      const bumpStr = bump ? ` (+$${bump.toFixed(2)}/hr)` : "";
+
+      openConfirm(
+        `Forcer le niveau de ${escHtml(painter.name)} vers "${targetLabel}"${bumpStr} ?`,
+        async () => {
+          try {
+            // Re-fetch latest painter state
+            const snap = await db.collection("painters").doc(painterId).get();
+            const fresh = snap.data();
+            // Determine which module was "completed" to trigger the level-up
+            const completedKey = fresh.currentModule;
+            await triggerLevelUp(painterId, fresh, completedKey, true);
+            // Refresh grid
+            const updated = _adminPainters.find((p) => p.id === painterId);
+            if (updated) await build30DayGrid(painterId, updated);
+          } catch (err) {
+            console.error("[forceLevelUp]", err);
+            alert("Erreur lors du changement de niveau.");
+          }
+        }
+      );
+    }
+
+    /**
+     * Admin forces a level down (with confirmation modal).
+     * @param {string} painterId
+     * @param {Object} painter
+     */
+    async function forceLevelDown(painterId, painter) {
+      const curIdx = MODULE_ORDER.indexOf(painter.currentModule);
+      if (curIdx <= 0) {
+        alert("Ce peintre est déjà au niveau de base.");
+        return;
+      }
+      const prevKey = MODULE_ORDER[curIdx - 1];
+      const prevLabel = prevKey === "base"
+        ? "Base ($17.00/hr)"
+        : MODULE_DEFS[prevKey]?.label ?? prevKey;
+
+      openConfirm(
+        `Rétrograder ${escHtml(painter.name)} vers "${prevLabel}" ?`,
+        async () => {
+          try {
+            const snap = await db.collection("painters").doc(painterId).get();
+            const fresh = snap.data();
+            await revertModule(painterId, fresh, prevKey);
+            const updated = _adminPainters.find((p) => p.id === painterId);
+            if (updated) await build30DayGrid(painterId, updated);
+          } catch (err) {
+            console.error("[forceLevelDown]", err);
+            alert("Erreur lors de la rétrogradation.");
+          }
+        }
+      );
+    }
+
+    // =========================================================
+    // === ADMIN — PAYROLL EXPORT ===
+    // =========================================================
+
+    /**
+     * Render the payroll table for a date range.
+     * For each painter: queries activityLog for levelup events within the range,
+     * derives starting pay and final pay.
+     * @param {string} startDate - "YYYY-MM-DD"
+     * @param {string} endDate   - "YYYY-MM-DD"
+     */
+    async function buildPayrollTable(startDate, endDate) {
+      const tbody = document.getElementById("payroll-table-body");
+      if (!tbody) return;
+      tbody.innerHTML = '<tr><td colspan="6" style="color:var(--color-text-muted);padding:1rem;">Chargement…</td></tr>';
+      _payrollRows = [];
+
+      try {
+        const start = new Date(startDate + "T00:00:00");
+        const end   = new Date(endDate   + "T23:59:59");
+
+        if (start > end) {
+          tbody.innerHTML = '<tr><td colspan="6" style="color:var(--color-error);padding:1rem;">Date début après date fin.</td></tr>';
+          return;
+        }
+
+        const painters = _adminPainters.length ? _adminPainters
+          : await db.collection("painters").get().then((s) => s.docs.map((d) => ({ id: d.id, ...d.data() })));
+
+        // Fetch all levelup events from activityLog and filter client-side
+        // (avoids composite index requirement for where + orderBy on different fields)
+        const logSnap = await db.collection("activityLog")
+          .where("action", "in", ["levelup", "force_levelup"])
+          .get();
+
+        const levelupsByPainter = {};
+        logSnap.docs.forEach((d) => {
+          const row = d.data();
+          const ts = row.timestamp?.toDate ? row.timestamp.toDate() : null;
+          if (!ts || ts < start || ts > end) return;
+          if (!levelupsByPainter[row.painterId]) levelupsByPainter[row.painterId] = [];
+          levelupsByPainter[row.painterId].push(row);
+        });
+        // Sort each painter's events chronologically
+        Object.values(levelupsByPainter).forEach((arr) => arr.sort((a, b) => {
+          const ta = a.timestamp?.toDate?.() ?? 0;
+          const tb = b.timestamp?.toDate?.() ?? 0;
+          return ta - tb;
+        }));
+
+        const rows = painters.sort((a, b) => a.name.localeCompare(b.name)).map((p) => {
+          const events = levelupsByPainter[p.id] ?? [];
+          // Starting pay = PAY_RATES[module before first bump in range], or current if no bumps
+          let startingModule = p.currentModule;
+          if (events.length > 0) {
+            // Walk back through MODULE_ORDER by the number of bumps
+            const curIdx = MODULE_ORDER.indexOf(p.currentModule);
+            const startIdx = Math.max(0, curIdx - events.length);
+            startingModule = MODULE_ORDER[startIdx];
+          }
+          const startingPay = (PAY_RATES[startingModule] ?? PAY_RATES.base) + (p.carBonus ? CAR_BONUS : 0);
+          const finalPay    = (PAY_RATES[p.currentModule] ?? PAY_RATES.base) + (p.carBonus ? CAR_BONUS : 0);
+          const totalBump   = finalPay - startingPay;
+
+          const modulesUnlocked = events.map((e) => e.taskName ?? "").filter(Boolean).join(", ") || "—";
+
+          _payrollRows.push({
+            name: p.name,
+            startingPay,
+            carBonus: p.carBonus,
+            modulesUnlocked,
+            totalBump,
+            finalPay,
+          });
+
+          return `
+            <tr>
+              <td>${escHtml(p.name)}</td>
+              <td>$${startingPay.toFixed(2)}</td>
+              <td>${p.carBonus ? "✅ $1.00" : "—"}</td>
+              <td style="font-size:0.8rem;color:var(--color-text-muted);">${escHtml(modulesUnlocked)}</td>
+              <td style="color:${totalBump > 0 ? "var(--color-success)" : "var(--color-text-muted)"};">
+                ${totalBump > 0 ? "+" : ""}$${totalBump.toFixed(2)}
+              </td>
+              <td><strong>$${finalPay.toFixed(2)}</strong></td>
+            </tr>`;
+        });
+
+        tbody.innerHTML = rows.join("");
+      } catch (err) {
+        console.error("[buildPayrollTable]", err);
+        tbody.innerHTML = '<tr><td colspan="6" style="color:var(--color-error);padding:1rem;">Erreur de chargement.</td></tr>';
+      }
+    }
+
+    /**
+     * Export the current payroll table to a CSV file download.
+     */
+    function exportCSV() {
+      if (!_payrollRows.length) {
+        alert("Aucune donnée à exporter. Actualisez d'abord la table.");
+        return;
+      }
+      const headers = ["Peintre", "Taux départ", "Bonus auto", "Modules débloqués", "Hausses totales", "Taux final"];
+      const lines = [
+        headers.join(","),
+        ..._payrollRows.map((r) => [
+          `"${r.name}"`,
+          `"$${r.startingPay.toFixed(2)}"`,
+          r.carBonus ? '"$1.00"' : '"—"',
+          `"${r.modulesUnlocked}"`,
+          `"${r.totalBump >= 0 ? "+" : ""}$${r.totalBump.toFixed(2)}"`,
+          `"$${r.finalPay.toFixed(2)}"`,
+        ].join(",")),
+      ];
+      const csv = lines.join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url  = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `paintrank-paie-${getTodayString()}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // =========================================================
+    // === THEME TOGGLE ===
+    // =========================================================
+
+    /**
+     * Apply a theme by setting data-theme on <html> and updating the toggle icon.
+     * @param {"light"|"dark"} theme
+     */
+    function applyTheme(theme) {
+      document.documentElement.setAttribute("data-theme", theme);
+      const btn = document.getElementById("theme-toggle");
+      if (!btn) return;
+      // Use Lucide icon names; createIcons() will swap them to SVG
+      btn.innerHTML = theme === "dark"
+        ? '<i data-lucide="sun"   width="20" height="20"></i>'
+        : '<i data-lucide="moon"  width="20" height="20"></i>';
+      if (typeof lucide !== "undefined") lucide.createIcons();
+    }
+
+    /** Flip between light and dark mode. */
+    function toggleTheme() {
+      const current = document.documentElement.getAttribute("data-theme") ?? "dark";
+      applyTheme(current === "dark" ? "light" : "dark");
+    }
+
+    // =========================================================
+    // === MODALS ===
+    // =========================================================
+
+    function openModal(id) {
+      const el = document.getElementById(id);
+      if (el) el.hidden = false;
+    }
+
+    function closeModal(id) {
+      const el = document.getElementById(id);
+      if (el) el.hidden = true;
+    }
+
+    /**
+     * Open the generic confirmation modal with a custom message and ok callback.
+     * The cancel button always just closes the modal.
+     *
+     * @param {string}   message  Question to display
+     * @param {function} onOk     Called when the user clicks "Confirmer"
+     */
+    function openConfirm(message, onOk) {
+      document.getElementById("confirm-message").textContent = message;
+      // Re-wire the OK button each time (replace node to clear old listeners)
+      const oldBtn = document.getElementById("confirm-ok-btn");
+      const newBtn = oldBtn.cloneNode(true);
+      oldBtn.parentNode.replaceChild(newBtn, oldBtn);
+      newBtn.addEventListener("click", () => {
+        closeModal("modal-confirm");
+        onOk();
+      });
+      openModal("modal-confirm");
+    }
+
+    // =========================================================
+    // === INIT ===
+    // =========================================================
+
+    document.addEventListener("DOMContentLoaded", () => {
+      // Apply default dark theme
+      applyTheme("dark");
+
+      // Wire up theme toggle button
+      document.getElementById("theme-toggle").addEventListener("click", toggleTheme);
+
+      // Wire up PIN submit
+      document.getElementById("pin-submit-btn").addEventListener("click", () => {
+        checkPin(document.getElementById("pin-input").value);
+      });
+      document.getElementById("pin-input").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") checkPin(e.target.value);
+      });
+
+      // Wire up admin tabs
+      document.querySelectorAll(".admin-tab-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          _switchAdminTab(btn.dataset.tab);
+          // Lazy-load tab content on first click
+          const tab = btn.dataset.tab;
+          if (tab === "activity") {
+            const filterVal = document.getElementById("activity-filter-painter").value || null;
+            renderActivityTab(filterVal);
+          } else if (tab === "payroll") {
+            // Default to last 14 days
+            const end   = getTodayString();
+            const startObj = new Date();
+            startObj.setDate(startObj.getDate() - 13);
+            const start = startObj.toISOString().slice(0, 10);
+            document.getElementById("payroll-start").value = start;
+            document.getElementById("payroll-end").value   = end;
+            buildPayrollTable(start, end);
+          }
+        });
+      });
+
+      // Activity log: filter by painter
+      document.getElementById("activity-filter-painter").addEventListener("change", (e) => {
+        renderActivityTab(e.target.value || null);
+      });
+
+      // Overrides: load grid when painter selected
+      document.getElementById("override-painter-select").addEventListener("change", async (e) => {
+        const painterId = e.target.value;
+        const actionsEl = document.getElementById("override-actions");
+        if (!painterId) {
+          document.getElementById("override-calendar-container").innerHTML = "";
+          if (actionsEl) actionsEl.hidden = true;
+          return;
+        }
+        const painter = _adminPainters.find((p) => p.id === painterId);
+        if (!painter) return;
+
+        if (actionsEl) {
+          actionsEl.hidden = false;
+          // Force level up: show only if there's a next module OR painter is mod3c (→ master)
+          const canLevelUp = getActiveModule(painter) !== null || painter.currentModule === "mod3c";
+          const canLevelDown = MODULE_ORDER.indexOf(painter.currentModule) > 0;
+          const levelUpBtn  = document.getElementById("force-levelup-btn");
+          const levelDownBtn = document.getElementById("force-leveldown-btn");
+          if (levelUpBtn)  levelUpBtn.hidden  = !canLevelUp;
+          if (levelDownBtn) levelDownBtn.hidden = !canLevelDown;
+
+          // Re-wire buttons with current painter
+          if (levelUpBtn) {
+            const newUp = levelUpBtn.cloneNode(true);
+            levelUpBtn.parentNode.replaceChild(newUp, levelUpBtn);
+            newUp.addEventListener("click", () => forceLevelUp(painterId, painter));
+          }
+          if (levelDownBtn) {
+            const newDown = levelDownBtn.cloneNode(true);
+            levelDownBtn.parentNode.replaceChild(newDown, levelDownBtn);
+            newDown.addEventListener("click", () => forceLevelDown(painterId, painter));
+          }
+        }
+
+        await build30DayGrid(painterId, painter);
+      });
+
+      // Wire up admin logout button
+      document.getElementById("admin-logout-btn").addEventListener("click", lockAdmin);
+
+      // Wire up level-up modal close
+      document.getElementById("levelup-close-btn").addEventListener("click", () => {
+        closeModal("modal-levelup");
+      });
+
+      // Wire up confirm modal cancel
+      document.getElementById("confirm-cancel-btn").addEventListener("click", () => {
+        closeModal("modal-confirm");
+      });
+
+      // Wire up payroll date range + export
+      document.getElementById("payroll-refresh-btn").addEventListener("click", () => {
+        const start = document.getElementById("payroll-start").value;
+        const end   = document.getElementById("payroll-end").value;
+        if (start && end) buildPayrollTable(start, end);
+      });
+      document.getElementById("export-csv-btn").addEventListener("click", exportCSV);
+
+      // Initialize Lucide icons
+      if (typeof lucide !== "undefined") lucide.createIcons();
+
+      // Start routing
+      route();
+    });
+  </script>
+
+</body>
+</html>
