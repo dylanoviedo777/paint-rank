@@ -1880,35 +1880,40 @@
      * @returns {Promise<{count: number, days: Array<{date, status}>}>}
      */
     async function computeStreak(painterId, activeModuleKey) {
-      // Safety bound: never look back more than this many calendar days.
-      // In practice we exit much earlier due to the early-exit conditions below.
+      // Fetch days in parallel batches to avoid sequential round-trips.
+      // Each batch fetches BATCH_SIZE days concurrently, then we classify
+      // and apply early-exit logic before fetching the next batch.
       const MAX_LOOKBACK = 200;
+      const BATCH_SIZE   = 14; // one streak-worth of days per batch
 
       const days = [];  // newest-first, for computeStreakFromDays
       let count = 0;
+      let done  = false;
 
-      for (let i = 0; i < MAX_LOOKBACK; i++) {
-        const dateString = getDateString(i);
+      for (let offset = 0; offset < MAX_LOOKBACK && !done; offset += BATCH_SIZE) {
+        const batchSize = Math.min(BATCH_SIZE, MAX_LOOKBACK - offset);
+        const dateStrings = Array.from({ length: batchSize }, (_, i) => getDateString(offset + i));
 
-        const snapshot = await db
-          .collection("checkins")
-          .doc(painterId)
-          .collection(dateString)
-          .get();
+        // Fire all reads for this batch in parallel
+        const snapshots = await Promise.all(
+          dateStrings.map((ds) =>
+            db.collection("checkins").doc(painterId).collection(ds).get()
+              .then((snap) => ({ ds, docs: snap.docs }))
+              .catch(() => ({ ds, docs: [] }))
+          )
+        );
 
-        const status = classifyDay(snapshot.docs, activeModuleKey);
-        days.push({ date: dateString, status });
+        // Process in chronological order (newest first = lowest offset first)
+        for (const { ds, docs } of snapshots) {
+          const status = classifyDay(docs, activeModuleKey);
+          days.push({ date: ds, status });
 
-        if (status === "fail") {
-          // Fail day is the reset point. count holds streak days accumulated so far.
-          break;
+          if (status === "fail") { done = true; break; }
+          if (status === "streak") {
+            count++;
+            if (count >= STREAK_REQUIRED) { done = true; break; }
+          }
         }
-        if (status === "streak") {
-          count++;
-          // Early exit: once we have enough streak days, no need to look further back.
-          if (count >= STREAK_REQUIRED) break;
-        }
-        // neutral → continue walking backwards
       }
 
       return { count, days };
@@ -1973,6 +1978,30 @@
     // starts before the current one finishes fetching streaks, the older one aborts.
     let _leaderboardGen = 0;
 
+    // In-memory streak cache — avoids re-fetching from Firestore when the
+    // leaderboard re-renders and painter data hasn't changed.
+    // Key: "painterId:moduleKey", Value: { count, ts }
+    const _streakCache = {};
+    const STREAK_CACHE_TTL = 30_000; // 30 seconds
+
+    /** Invalidate cached streak for a specific painter (call after check-in writes). */
+    function invalidateStreakCache(painterId) {
+      for (const key of Object.keys(_streakCache)) {
+        if (key.startsWith(painterId + ":")) delete _streakCache[key];
+      }
+    }
+
+    async function computeStreakCached(painterId, activeModuleKey) {
+      const cacheKey = `${painterId}:${activeModuleKey}`;
+      const cached = _streakCache[cacheKey];
+      if (cached && (Date.now() - cached.ts) < STREAK_CACHE_TTL) {
+        return { count: cached.count, days: cached.days };
+      }
+      const result = await computeStreak(painterId, activeModuleKey);
+      _streakCache[cacheKey] = { count: result.count, days: result.days, ts: Date.now() };
+      return result;
+    }
+
     /**
      * Async leaderboard render.
      *
@@ -2007,7 +2036,7 @@
           const activeModule = getActiveModule(painter);
           if (!activeModule) return { id: painter.id, count: 0 };
           try {
-            const { count } = await computeStreak(painter.id, activeModule);
+            const { count } = await computeStreakCached(painter.id, activeModule);
             return { id: painter.id, count };
           } catch (e) {
             console.warn("[renderLeaderboard] streak fetch failed for", painter.id, e);
@@ -2273,7 +2302,7 @@
       if (activeModule) {
         let streakCount = 0;
         try {
-          const result = await computeStreak(painter.id, activeModule);
+          const result = await computeStreakCached(painter.id, activeModule);
           streakCount = result.count;
         } catch (e) {
           console.warn("[renderPainter] computeStreak error", e);
@@ -2512,6 +2541,9 @@
           adminOverride,
           adminOverrideBy: adminOverride ? "admin" : "",
         });
+
+      // Invalidate cached streak so next render fetches fresh data
+      invalidateStreakCache(painterId);
 
       // 2. Fetch fresh painter data for logging and level checks
       const painterSnap = await db.collection("painters").doc(painterId).get();
@@ -3400,18 +3432,31 @@
       container.innerHTML = '<p class="text-muted text-sm">Chargement…</p>';
 
       try {
-        let query = db.collection("activityLog").orderBy("timestamp", "desc");
+        let docs;
         if (filterPainterId) {
-          query = db.collection("activityLog")
-            .where("painterId", "==", filterPainterId)
-            .orderBy("timestamp", "desc")
-            .limit(200);
+          // Try compound query first (requires composite index).
+          // Falls back to client-side filtering if the index doesn't exist.
+          try {
+            const snap = await db.collection("activityLog")
+              .where("painterId", "==", filterPainterId)
+              .orderBy("timestamp", "desc")
+              .limit(200)
+              .get();
+            docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          } catch (_indexErr) {
+            // Composite index not set up — fallback to fetch-all + filter
+            const snap = await db.collection("activityLog")
+              .orderBy("timestamp", "desc").limit(500).get();
+            docs = snap.docs
+              .map((d) => ({ id: d.id, ...d.data() }))
+              .filter((d) => d.painterId === filterPainterId)
+              .slice(0, 200);
+          }
         } else {
-          query = query.limit(200);
+          const snap = await db.collection("activityLog")
+            .orderBy("timestamp", "desc").limit(200).get();
+          docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         }
-        const snap = await query.get();
-
-        let docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
         if (docs.length === 0) {
           container.innerHTML = '<p class="text-muted text-sm">Aucune activité enregistrée.</p>';
@@ -3543,9 +3588,10 @@
 
       try {
         await toggleTask(painterId, taskId, dateString, !currentDone, true);
-        // Refresh the grid after toggle
-        const painter = _adminPainters.find((p) => p.id === painterId);
-        if (painter) await build30DayGrid(painterId, painter);
+        // Refresh grid with guaranteed-fresh data after write
+        const afterSnap = await db.collection("painters").doc(painterId).get();
+        const afterData = { id: painterId, ...afterSnap.data() };
+        await build30DayGrid(painterId, afterData);
       } catch (err) {
         console.error("[adminToggleTask]", err);
         if (rowEl) rowEl.classList.remove("loading");
@@ -3586,9 +3632,13 @@
             const freshTarget = freshActive ?? (fresh.currentModule === "mod3c" ? "master" : null);
             if (!freshTarget) { alert("Ce peintre est déjà au niveau maximum."); return; }
             await triggerLevelUp(painterId, fresh, freshTarget, true);
-            // Refresh grid
-            const updated = _adminPainters.find((p) => p.id === painterId);
-            if (updated) await build30DayGrid(painterId, updated);
+            invalidateStreakCache(painterId);
+            // Refresh grid with guaranteed-fresh data (don't rely on
+            // _adminPainters — the onSnapshot listener may not have
+            // fired yet after the Firestore write above).
+            const afterSnap = await db.collection("painters").doc(painterId).get();
+            const afterData = { id: painterId, ...afterSnap.data() };
+            await build30DayGrid(painterId, afterData);
           } catch (err) {
             console.error("[forceLevelUp]", err);
             alert("Erreur lors du changement de niveau.");
@@ -3620,8 +3670,10 @@
             const snap = await db.collection("painters").doc(painterId).get();
             const fresh = snap.data();
             await revertModule(painterId, fresh, prevKey);
-            const updated = _adminPainters.find((p) => p.id === painterId);
-            if (updated) await build30DayGrid(painterId, updated);
+            // Re-fetch after write for guaranteed-fresh grid rebuild
+            const afterSnap = await db.collection("painters").doc(painterId).get();
+            const afterData = { id: painterId, ...afterSnap.data() };
+            await build30DayGrid(painterId, afterData);
           } catch (err) {
             console.error("[forceLevelDown]", err);
             alert("Erreur lors de la rétrogradation.");
