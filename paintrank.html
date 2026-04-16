@@ -199,7 +199,9 @@
       position: sticky;
       top: 0;
       z-index: 100;
-      background: var(--color-surface);
+      background: color-mix(in srgb, var(--color-surface) 85%, transparent);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
       border-bottom: 1px solid var(--color-border);
     }
 
@@ -272,8 +274,78 @@
       margin-bottom: 1rem;
     }
 
+    .leaderboard-chart {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+      padding: 1rem;
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: 16px;
+    }
+    .chart-bar-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .chart-bar-name {
+      width: 80px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-align: right;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex-shrink: 0;
+    }
+    .chart-bar-track {
+      flex: 1;
+      height: 24px;
+      background: var(--color-surface-2);
+      border-radius: 12px;
+      overflow: hidden;
+      position: relative;
+    }
+    .chart-bar-fill {
+      height: 100%;
+      border-radius: 12px;
+      background: linear-gradient(90deg, var(--color-primary), #f87171);
+      transition: width 0.6s ease;
+      min-width: 2px;
+    }
+    .chart-bar-label {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: var(--color-text);
+      mix-blend-mode: difference;
+    }
+    .chart-bar-count {
+      width: 40px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--color-text-muted);
+      flex-shrink: 0;
+    }
+
     .rank-card {
-      /* Individual painter ranking card */
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 1rem 1.25rem;
+      background: var(--color-surface);
+      border: 1.5px solid var(--color-border);
+      border-radius: 14px;
+      margin-bottom: 0.75rem;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .rank-card:first-child {
+      border-color: var(--color-primary);
+      box-shadow: 0 2px 12px rgba(239, 68, 68, 0.1);
     }
 
     .rank-number {
@@ -433,13 +505,23 @@
       display: flex;
       align-items: center;
       gap: 1rem;
-      padding: 1rem;
+      padding: 1rem 1.25rem;
       background: var(--color-surface);
-      border: 1px solid var(--color-border);
-      border-radius: 12px;
-      min-height: 64px;
+      border: 1.5px solid var(--color-border);
+      border-radius: 14px;
+      min-height: 56px;
       cursor: pointer;
-      transition: background 0.15s, border-color 0.15s;
+      transition: background 0.15s, transform 0.1s, border-color 0.15s, box-shadow 0.15s;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .task-item:active {
+      transform: scale(0.98);
+    }
+    .task-item:hover {
+      border-color: var(--color-primary);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
     }
 
     .task-item.done {
@@ -467,6 +549,25 @@
     .task-label {
       font-weight: 500;
       font-size: 1rem;
+    }
+
+    .task-item.done .task-label {
+      text-decoration: line-through;
+      opacity: 0.6;
+    }
+
+    @keyframes task-pulse {
+      0%   { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+      50%  { box-shadow: 0 0 16px 4px rgba(239, 68, 68, 0.3); }
+      100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+    .task-item.just-completed {
+      animation: task-pulse 0.6s ease-out;
+      border-color: var(--color-primary) !important;
+    }
+    .task-item.just-completed .task-checkbox {
+      transform: scale(1.2);
+      transition: transform 0.2s ease;
     }
 
     /* Recent activity table */
@@ -1059,6 +1160,31 @@
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
     }
+
+    /* === VISUAL POLISH === */
+    .view-header {
+      padding: 2rem 1.5rem 1.5rem;
+      text-align: center;
+      background: linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 8%, transparent), transparent);
+      border-radius: 0 0 24px 24px;
+      margin: -1rem -1rem 1.5rem -1rem;
+    }
+    .view-header h2 {
+      font-size: 1.5rem;
+      margin-bottom: 0.25rem;
+    }
+    .view-header p {
+      font-size: 0.85rem;
+      color: var(--color-text-muted);
+    }
+
+    .view-panel {
+      animation: viewFadeIn 0.25s ease;
+    }
+    @keyframes viewFadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
   </style>
 </head>
 
@@ -1082,9 +1208,12 @@
   </header>
 
   <!-- ===================== VIEW: LEADERBOARD ===================== -->
-  <div id="view-leaderboard" class="view" hidden>
+  <div id="view-leaderboard" class="view view-panel" hidden>
     <div class="container">
-      <h2 class="section-title">Classement</h2>
+      <div class="view-header">
+          <h2>Classement</h2>
+          <p>Progression de l'équipe — streaks et niveaux</p>
+        </div>
 
       <!-- Individual rankings -->
       <section id="individual-rankings">
@@ -1100,7 +1229,7 @@
   </div>
 
   <!-- ===================== VIEW: PAINTER ===================== -->
-  <div id="view-painter" class="view" hidden>
+  <div id="view-painter" class="view view-panel" hidden>
     <div class="container">
 
       <!-- PAINTER SELECTOR — shown when no name/invalid name in URL -->
@@ -1175,7 +1304,7 @@
   </div>
 
   <!-- ===================== VIEW: ADMIN ===================== -->
-  <div id="view-admin" class="view" hidden>
+  <div id="view-admin" class="view view-panel" hidden>
     <div class="container">
 
       <!-- PIN screen -->
@@ -1214,6 +1343,20 @@
           <div class="flex justify-between items-center" style="margin-bottom: 1rem;">
             <h3>Peintres</h3>
             <button class="btn btn-primary btn-sm" id="add-painter-btn">+ Ajouter</button>
+          </div>
+          <div class="add-painter-form" id="add-painter-form-el" hidden>
+            <div class="form-group">
+              <label class="form-label" for="new-painter-name">Prénom</label>
+              <input class="form-input" id="new-painter-name" type="text" placeholder="alex" maxlength="40" />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="new-painter-team">Équipe</label>
+              <input class="form-input" id="new-painter-team" type="text" placeholder="Équipe Rouge" maxlength="60" />
+            </div>
+            <div style="display:flex;align-items:flex-end;padding-bottom:1rem;gap:0.5rem;">
+              <button class="btn btn-primary btn-sm" id="add-painter-confirm-btn">Créer</button>
+              <button class="btn btn-secondary btn-sm" id="add-painter-cancel-btn">Annuler</button>
+            </div>
           </div>
           <div id="painters-list">
             <!-- Painter rows injected by JS: renderPaintersTab() -->
@@ -1680,22 +1823,23 @@
       _wirePainterSelectBtn();
     }
 
-    /** Fill the painter-select-dropdown with all painters sorted by name. */
+    /** Fill the painter-select-dropdown with all painters (realtime). */
     function _populatePainterDropdown() {
       const sel = document.getElementById("painter-select-dropdown");
-      sel.innerHTML = '<option value="">— Sélectionner ton nom —</option>';
-      db.collection("painters").get()
-        .then((snap) => {
-          snap.docs
-            .sort((a, b) => a.data().name.localeCompare(b.data().name))
-            .forEach((doc) => {
-              const opt = document.createElement("option");
-              opt.value = doc.data().name;
-              opt.textContent = doc.data().name;
-              sel.appendChild(opt);
-            });
-        })
-        .catch(console.error);
+      sel.innerHTML = '<option value="">Chargement…</option>';
+      const unsub = listenPainters((painters) => {
+        const sorted = [...painters].sort((a, b) => a.name.localeCompare(b.name));
+        const current = sel.value;
+        sel.innerHTML = '<option value="">— Sélectionner ton nom —</option>';
+        sorted.forEach((p) => {
+          const opt = document.createElement("option");
+          opt.value = p.name;
+          opt.textContent = p.name;
+          sel.appendChild(opt);
+        });
+        if (current) sel.value = current;
+      });
+      _unsubscribers.push(unsub);
     }
 
     /** Wire the "Voir mon profil" button (cloneNode clears previous listeners). */
@@ -1769,6 +1913,12 @@
           if (!snap.exists) return;
           _currentPainter = { id: painterId, ...snap.data() };
           await renderPainter(_currentPainter);
+          // Re-render checklist with the (possibly new) module's tasks
+          const freshCheckins = await db.collection("checkins")
+            .doc(painterId).collection(getTodayString()).get();
+          const cMap = {};
+          freshCheckins.docs.forEach((d) => { cMap[d.id] = d.data(); });
+          renderChecklist(getActiveTasks(_currentPainter), cMap, painterId);
         },
         (err) => console.error("[painterDoc onSnapshot]", err)
       );
@@ -2052,6 +2202,25 @@
       const streakMap = {};
       streakResults.forEach(({ id, count }) => { streakMap[id] = count; });
 
+      // === Bar chart visualization ===
+      const maxStreak = Math.max(1, ...Object.values(streakMap));
+      const sortedForChart = [...painters]
+        .map(p => ({ name: p.name, count: streakMap[p.id] ?? 0 }))
+        .sort((a, b) => b.count - a.count);
+      const chartHtml = `
+        <div class="leaderboard-chart">
+          <div style="font-size:0.8rem;font-weight:700;color:var(--color-text-muted);margin-bottom:0.25rem;">🔥 Streaks</div>
+          ${sortedForChart.map(p => `
+            <div class="chart-bar-row">
+              <span class="chart-bar-name">${escHtml(p.name)}</span>
+              <div class="chart-bar-track">
+                <div class="chart-bar-fill" style="width:${(p.count / 14 * 100).toFixed(1)}%"></div>
+              </div>
+              <span class="chart-bar-count">${p.count}/14</span>
+            </div>
+          `).join("")}
+        </div>`;
+
       // 3. Sort: modules completed desc → streak days desc
       const sorted = [...painters].sort((a, b) => {
         const modDiff = getModuleCompletionCount(b) - getModuleCompletionCount(a);
@@ -2060,7 +2229,7 @@
       });
 
       // 4. Render individual rank cards
-      rankContainer.innerHTML = "";
+      rankContainer.innerHTML = chartHtml;
       sorted.forEach((painter, i) => {
         rankContainer.appendChild(buildRankCard(painter, i + 1, streakMap[painter.id] ?? 0));
       });
@@ -2416,6 +2585,22 @@
           li.classList.toggle("done", newDone);
           li.setAttribute("aria-checked", String(newDone));
           li.querySelector(".task-checkbox").innerHTML = newDone ? CHECK_SVG : "";
+
+          // Visual stimulus — fire pulse on completion
+          if (newDone) {
+            li.classList.add("just-completed");
+            // Add fire emoji that fades out
+            const fire = document.createElement("span");
+            fire.textContent = "🔥";
+            fire.style.cssText = "position:absolute;right:1rem;font-size:1.4rem;opacity:1;transition:all 0.8s ease;pointer-events:none;";
+            li.style.position = "relative";
+            li.appendChild(fire);
+            requestAnimationFrame(() => {
+              fire.style.opacity = "0";
+              fire.style.transform = "translateY(-12px) scale(1.3)";
+            });
+            setTimeout(() => { fire.remove(); li.classList.remove("just-completed"); }, 800);
+          }
 
           try {
             await toggleTask(painterId, task.id, today, newDone);
@@ -3175,28 +3360,6 @@
 
       const sorted = [...painters].sort((a, b) => a.name.localeCompare(b.name));
 
-      // Preserve form visibility state across re-renders (realtime listener fires often)
-      const prevFormVisible = document.getElementById("add-painter-form-el")
-        ? !document.getElementById("add-painter-form-el").hidden
-        : false;
-
-      // Add-painter form (always included so it can be toggled)
-      const formHtml = `
-          <div class="add-painter-form" id="add-painter-form-el" hidden>
-            <div class="form-group">
-              <label class="form-label" for="new-painter-name">Prénom</label>
-              <input class="form-input" id="new-painter-name" type="text" placeholder="alex" maxlength="40" />
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="new-painter-team">Équipe</label>
-              <input class="form-input" id="new-painter-team" type="text" placeholder="Équipe Rouge" maxlength="60" />
-            </div>
-            <div style="display:flex;align-items:flex-end;padding-bottom:1rem;gap:0.5rem;">
-              <button class="btn btn-primary btn-sm" id="add-painter-confirm-btn">Créer</button>
-              <button class="btn btn-secondary btn-sm" id="add-painter-cancel-btn">Annuler</button>
-            </div>
-          </div>`;
-
       const emptyState = sorted.length === 0
         ? '<p class="text-muted text-sm" style="padding:1.5rem 0.5rem;">Aucun peintre. Cliquez sur "+ Ajouter" pour commencer.</p>'
         : "";
@@ -3258,13 +3421,7 @@
           </div>`;
       }).join("");
 
-      container.innerHTML = formHtml + emptyState + rowsHtml;
-
-      // Restore form visibility state (the form is always hidden in innerHTML above)
-      if (prevFormVisible) {
-        const formEl = document.getElementById("add-painter-form-el");
-        if (formEl) formEl.hidden = false;
-      }
+      container.innerHTML = emptyState + rowsHtml;
 
       // Wire up the "add" button (only once — the button is outside painters-list so it persists)
       const addBtn = document.getElementById("add-painter-btn");
@@ -3275,8 +3432,10 @@
           if (form) form.hidden = !form.hidden;
         });
       }
+      // Confirm/cancel buttons are now in static HTML — wire once via _wired flag
       const confirmBtn = document.getElementById("add-painter-confirm-btn");
-      if (confirmBtn) {
+      if (confirmBtn && !confirmBtn._wired) {
+        confirmBtn._wired = true;
         confirmBtn.addEventListener("click", () => {
           const name = document.getElementById("new-painter-name").value.trim();
           const team = document.getElementById("new-painter-team").value.trim();
@@ -3285,7 +3444,8 @@
         });
       }
       const cancelBtn = document.getElementById("add-painter-cancel-btn");
-      if (cancelBtn) {
+      if (cancelBtn && !cancelBtn._wired) {
+        cancelBtn._wired = true;
         cancelBtn.addEventListener("click", () => {
           const form = document.getElementById("add-painter-form-el");
           if (form) form.hidden = true;
